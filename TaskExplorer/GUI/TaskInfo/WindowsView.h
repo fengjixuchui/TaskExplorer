@@ -1,5 +1,6 @@
 #pragma once
 #include <qwidget.h>
+#include "../../Common/TreeWidgetEx.h"
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/PanelView.h"
 #include "../../Common/SettingsWidgets.h"
@@ -18,10 +19,12 @@ public:
 	virtual ~CWindowsView();
 
 public slots:
-	void					ShowWindows(const CProcessPtr& pProcess);
+	void					ShowProcess(const CProcessPtr& pProcess);
+	void					Refresh();
 
 private slots:
 	void					OnWindowsUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
+	void					OnItemSelected(const QModelIndex &current);
 
 	//void					OnMenu(const QPoint &point);
 	void					OnWindowAction();
@@ -57,6 +60,10 @@ private:
 	QAction*				m_pEnabled;
 	QSpinBox*				m_pOpacity;
 	QAction*				m_pOnTop;
+
+	QSplitter*				m_pSplitter;
+
+	CPanelWidget<QTreeWidgetEx>* m_pWindowDetails;
 
 	bool					m_LockValue;
 };

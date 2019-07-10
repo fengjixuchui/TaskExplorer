@@ -9,9 +9,10 @@ class CSocketsView;
 class CThreadsView;
 class CModulesView;
 class CWindowsView;
-//class CMemoryView;
-//class CTokensView;
+class CMemoryView;
+class CTokenView;
 class CJobView;
+class CServicesView;
 class CEnvironmentView;
 
 
@@ -25,6 +26,7 @@ public:
 public slots:
 	void				OnTab(int tabIndex);
 	void				ShowProcess(const CProcessPtr& pProcess);
+	void				SellectThread(quint64 ThreadId);
 	void				Refresh();
 
 protected:
@@ -39,10 +41,11 @@ private:
 	CThreadsView*		m_pThreadsView;
 	CModulesView*		m_pModulesView;
 	CWindowsView*		m_pWindowsView;
-	//CMemoryView*		m_pMemoryView;
-	//CTokensView*		m_pTokensView;
+	CMemoryView*		m_pMemoryView;
 #ifdef WIN32
+	CTokenView*			m_pTokenView;
 	CJobView*			m_pJobView;
+	CServicesView*		m_pServiceView;
 #endif
 	CEnvironmentView*	m_pEnvironmentView;
 };

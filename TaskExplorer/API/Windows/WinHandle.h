@@ -28,13 +28,76 @@ public:
 	virtual ulong GetTypeIndex() const				{ QReadLocker Locker(&m_Mutex); return m_TypeIndex; }
 	virtual ulong GetFileFlags() const				{ QReadLocker Locker(&m_Mutex); return m_FileFlags; }
 
+	virtual QString GetTypeName() const				{ QReadLocker Locker(&m_Mutex); return m_TypeName; }
 	virtual QString GetOriginalName() const			{ QReadLocker Locker(&m_Mutex); return m_OriginalName; }
 
 	virtual QString GetFileShareAccessString() const;
 	virtual QString GetTypeString() const;
 	virtual QString GetGrantedAccessString() const;
 
-	virtual QVariantMap GetDetailedInfos() const;
+	struct SHandleInfo
+	{
+		SHandleInfo()
+		{
+			memset(this, 0, sizeof(SHandleInfo));
+		}
+
+		ulong References;
+		ulong Handles;
+
+		quint64 Paged;
+		quint64 VirtualSize;
+
+		union
+		{
+			struct
+			{
+				quint64 SeqNumber;
+				quint64 Context;
+			} Port;
+
+			struct
+			{
+				ulong Mode;
+				bool IsDir;
+				quint64 Size;
+				quint64 Position;
+			} File;
+
+			struct
+			{
+				ulong Attribs;
+				quint64 Size;
+			} Section;
+
+			struct
+			{
+				long Count;
+				bool Abandoned;
+				quint64 OwnerPID;
+				quint64 OwnerTID;
+			} Mutant;
+
+			struct
+			{
+				quint64 PID;
+				quint64 TID;
+				time_t Created;
+				time_t Exited;
+				int ExitStatus;
+			} Task;
+
+			struct
+			{
+				quint64 Remaining;
+				bool Signaled;
+			} Timer;
+		};
+	};
+
+	static QString GetFileAccessMode(ulong Mode);
+	static QString GetSectionType(ulong Attribs);
+	virtual SHandleInfo GetHandleInfo() const;
 
 	virtual STATUS				Close(bool bForce = false);
 
@@ -45,7 +108,12 @@ public:
 
 		eEventSet,
 		eEventReset,
-		eEventPulse
+		eEventPulse,
+
+		eSetLow,
+		eSetHigh,
+
+		eCancelTimer
 	};
 	virtual STATUS				DoHandleAction(EHandleAction Action);
 

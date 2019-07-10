@@ -7,8 +7,10 @@
 #ifdef WIN32
 #include "../API/Windows/WinProcess.h"
 #endif
+#include "../API/MemDumper.h"
+#include "..\Common\ProgressDialog.h"
 #include "TaskInfo/TaskInfoWindow.h"
-
+#include "RunAsDialog.h"
 
 CProcessTree::CProcessTree(QWidget *parent)
 	: CTaskView(parent)
@@ -63,12 +65,13 @@ CProcessTree::CProcessTree(QWidget *parent)
 	m_pVirtualization->setCheckable(true);
 	//QAction*				m_pWindows;
 	//QAction*				m_pGDI_Handles;
-	m_pCritical = m_pMenu->addAction(tr("Critical"), this, SLOT(OnCritical()));
+	m_pCritical = m_pMenu->addAction(tr("Critical"), this, SLOT(OnProcessAction()));
 	m_pCritical->setCheckable(true);
 	m_pReduceWS = m_pMenu->addAction(tr("Reduce Working Set"), this, SLOT(OnProcessAction()));
 	//QAction*				m_pUnloadModules;
 	//QAction*				m_pWatchWS;
 #endif
+	m_pRunAsThis = m_pMenu->addAction(tr("Run as this User"), this, SLOT(OnRunAsThis()));
 
 	AddPriorityItemsToMenu(eProcess, m_pMenu);
 	AddPanelItemsToMenu(m_pMenu);
@@ -224,8 +227,7 @@ void CProcessTree::OnDoubleClicked(const QModelIndex& Index)
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 
 	CProcessPtr pProcess = m_pProcessModel->GetProcess(ModelIndex);
-	CTaskInfoWindow* pTaskInfoWindow = new CTaskInfoWindow();
-	pTaskInfoWindow->ShowProcess(pProcess);
+	CTaskInfoWindow* pTaskInfoWindow = new CTaskInfoWindow(pProcess);
 	pTaskInfoWindow->show();
 }
 
@@ -256,21 +258,23 @@ void CProcessTree::OnMenu(const QPoint &point)
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 	CProcessPtr pProcess = m_pProcessModel->GetProcess(ModelIndex);
 	
-	m_pCreateDump->setEnabled(!pProcess.isNull() && m_pProcessList->selectedRows().count() == 1);
-	m_pDebug->setEnabled(!pProcess.isNull());
+	m_pCreateDump->setEnabled(m_pProcessList->selectedRows().count() == 1);
+	m_pDebug->setEnabled(m_pProcessList->selectedRows().count() == 1);
 	m_pDebug->setChecked(pProcess && pProcess->HasDebugger());
 
 #ifdef WIN32
 	QSharedPointer<CWinProcess> pWinProcess = pProcess.objectCast<CWinProcess>();
+	CWinTokenPtr pToken = pWinProcess ? pWinProcess->GetToken() : NULL;
 
-	m_pVirtualization->setEnabled(!pWinProcess.isNull() && pWinProcess->IsVirtualizationAllowed());
-	m_pVirtualization->setChecked(pWinProcess && pWinProcess->IsVirtualizationEnabled());
+	m_pVirtualization->setEnabled(pToken && pToken->IsVirtualizationAllowed());
+	m_pVirtualization->setChecked(pToken && pToken->IsVirtualizationEnabled());
 
 	m_pCritical->setEnabled(!pWinProcess.isNull());
 	m_pCritical->setChecked(pWinProcess && pWinProcess->IsCriticalProcess());
 
 	m_pReduceWS->setEnabled(!pWinProcess.isNull());
 #endif
+	m_pRunAsThis->setEnabled(m_pProcessList->selectedRows().count() == 1);
 
 	CTaskView::OnMenu(point);
 }
@@ -285,9 +289,24 @@ void CProcessTree::OnCrashDump()
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 	CProcessPtr pProcess = m_pProcessModel->GetProcess(ModelIndex);
 
-	STATUS status = pProcess->CreateDump(DumpPath);
+	CMemDumper* pDumper = CMemDumper::New();
+	STATUS status = pDumper->PrepareDump(pProcess, DumpPath);
 	if(status.IsError())
 		QMessageBox::warning(this, "TaskExplorer", tr("Failed to create dump file, reason: %1").arg(status.GetText()));
+	else
+	{
+		CProgressDialog* pDialog = new CProgressDialog(tr("Dumping %1").arg(pProcess->GetName()), this);
+		pDialog->show();
+
+		connect(pDumper, SIGNAL(ProgressMessage(const QString&, int)), pDialog, SLOT(OnProgressMessage(const QString&, int)));
+		connect(pDumper, SIGNAL(StatusMessage(const QString&, int)), pDialog, SLOT(OnStatusMessage(const QString&, int)));
+		connect(pDialog, SIGNAL(Cancel()), pDumper, SLOT(Cancel()));
+		connect(pDumper, SIGNAL(finished()), pDialog, SLOT(OnFinished()));
+
+		connect(pDumper, SIGNAL(finished()), pDumper, SLOT(deleteLater()));
+
+		pDumper->start();
+	}
 }
 
 void CProcessTree::OnProcessAction()
@@ -305,11 +324,25 @@ void CProcessTree::OnProcessAction()
 		retry:
 			STATUS Status = OK;
 			if (sender() == m_pVirtualization)
-				Status = pWinProcess->SetVirtualizationEnabled(m_pVirtualization->isChecked());
+			{
+				CWinTokenPtr pToken = pWinProcess->GetToken();
+				if (pToken)
+					Status = pToken->SetVirtualizationEnabled(m_pVirtualization->isChecked());
+				else
+					Status = ERR(tr("This process does not have a token."), -1);
+			}
 			else if (sender() == m_pCritical)
 				Status = pWinProcess->SetCriticalProcess(m_pCritical->isChecked(), Force == 1);
 			else if (sender() == m_pReduceWS)
 				Status = pWinProcess->ReduceWS();
+			else if (sender() == m_pDebug)
+			{
+				if (m_pDebug->isChecked())
+					pWinProcess->AttachDebugger();
+				else
+					pWinProcess->DetachDebugger();
+			}
+			
 
 			if (Status.IsError())
 			{
@@ -341,6 +374,15 @@ void CProcessTree::OnProcessAction()
 #endif
 }
 
+void CProcessTree::OnRunAsThis()
+{
+	QModelIndex Index = m_pProcessList->currentIndex();
+	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
+	CProcessPtr pProcess = m_pProcessModel->GetProcess(ModelIndex);
+
+	CRunAsDialog* pWnd = new CRunAsDialog(pProcess->GetProcessId());
+	pWnd->show();
+}
 
 void CProcessTree::OnUpdateHistory()
 {

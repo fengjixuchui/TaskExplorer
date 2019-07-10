@@ -1,6 +1,6 @@
 /*
  * Process Hacker -
- *   qt wrapper and support functions
+ *   qt wrapper and support functions based on netprv.c
  *
  * Copyright (C) 2011 wj32
  * Copyright (C) 2019 David Xanatos
@@ -29,7 +29,6 @@
 
 #include "WinSocket.h"
 #include "WindowsAPI.h"
-#include "EventMonitor.h"
 
 #include <QtWin>
 

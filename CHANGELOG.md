@@ -2,44 +2,69 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## ToDo
-### Major
-- settings dialog !!!
-- gpu usage
-- .net stack tracking
-- add wait analyze feature
 
-- add window properties window / details area
-- add more generic system infos
+## [0.3] - 2019-07-09
+### Added
+- tokens tab with advanced infos
+- improved handle window
+-- show job info window 
+-- show token info window 
+-- show task info window
+-- open file lokation
+-- open registry key
+-- read/write section memory
+-- type filter now enumerates all types
+- added size info to section type handle
 
-### missing/empty tabs
-- memory
-- tokens
-- services tab
-- Gdi objects
-- .NET assemblies and performance
-- ras tab
+### Changed
+- rewoked sid to username resolution now using a worker thread to improve performance
+- CWinProcess does nto longer handle sid_user/token informations all is doem by CWinToken instead
 
-### Minor
-- add file only filter to handles
-- disable detail view if more than one item is selected or allow to see combined details
-- disable a lot of sub menuitems when more than 1 item is selected
-- pause refresh + refresh now
-- select reasonable default columns
-- add run as this user menu option
+### Fixed
+- fixed issue with the first graph text not being displayed
+- fixed an issue causing the client to wait for 10 sec on shutdown
 
-- tools
--- shutdown cpmputer 
--- logg of user
--- find open file
 
-## missing dialogs & co
+
+## [0.2] - 2019-07-05
+### Added
+- memory tab, with options to dump the memory, free it or change access permissions
+- advanced memory editor window
+-- forked qhexedit2 https://github.com/DavidXanatos/qhexedit to ad missing functionality, edit, lock mode, etc...
+-- added a QHexEditor class to qhexedit implementing a generic hex editor dialog with options and search capability
+
+### Changed
+- I/O stats does not longer show ETW values when the is not monitoring ETW events
+
+### Fixed
+- fixed Uptime column not being refreshed
+
+
+
+## [0.1] - 2019-06-30
+### Added
+- service property window, including all pages form the extended services plugin
+- cpu and memory usage in tray icon
+- option to start elevanted without an UAC prompt
+- auto run using windows registry
+- build x86 binaries
 - add option to create a process dump
-- add service info window
+- afility to run a program with the tocken of an other program (run as this user)
+- services tab showing services hosted by the selcted process
+- add go to service key
+- type filter to handles
+- added missing handle actions
+- add window properties details area
 
-## known issues:
-- run as (TI) feature
+### Changed 
+- paged memory usage is now extracted form pagefile informtions
+- monitoring of ETW events can be disabled and re enabled in tool menu
+- handle property detail are no a tree widget
 
+### Fixed
+- crash when querying samba datarate and getting null
+- run as feature forks now
+- fixed issue with CoInitialize
 
 
 

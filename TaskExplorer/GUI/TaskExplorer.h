@@ -10,8 +10,8 @@
 #include "Common/FlexError.h"
 
 #define VERSION_MJR		0
-#define VERSION_MIN 	0
-#define VERSION_REV 	8
+#define VERSION_MIN 	3
+#define VERSION_REV 	0
 #define VERSION_UPD 	0
 
 class CTaskExplorer : public QMainWindow
@@ -41,11 +41,16 @@ public:
 		eIsInherited,
 		eIsProtected,
 #endif
+		eExecutable,
 		eColorCount
 	};
 	static QColor	GetColor(int Color);
 
 	static void		CheckErrors(QList<STATUS> Errors);
+
+public slots:
+	void				UpdateTray();
+
 
 protected:
 	void				timerEvent(QTimerEvent* pEvent);
@@ -57,6 +62,8 @@ protected:
 	int					m_uTimerID;
 
 private slots:
+	void				OnInitDone();
+
 	void				OnRun();
 	void				OnRunAdmin();
 	void				OnRunUser();
@@ -71,9 +78,12 @@ private slots:
 	void				OnTaskTab();
 
 	void				OnPreferences();
+	void				OnAutoRun();
+	void				OnSkipUAC();
 
 	void				OnCreateService();
 	void				OnSCMPermissions();
+	void				OnMonitorETW();
 
 	void				OnSysTray(QSystemTrayIcon::ActivationReason Reason);
 
@@ -110,16 +120,22 @@ private:
 
 	QMenu*				m_pMenuOptions;
 	QAction*			m_pMenuConf;
+	QAction*			m_pMenuAutoRun;
+#ifdef WIN32
+	QAction*			m_pMenuUAC;
+#endif
 
 	QMenu*				m_pMenuTools;
 	QMenu*				m_pMenuServices;
 	QAction*			m_pMenuCreateService;
 #ifdef WIN32
 	QAction*			m_pMenuSCMPermissions;
+	QAction*			m_pMenuETW;
 #endif
 
 	QMenu*				m_pMenuHelp;
 	QAction*			m_pMenuAbout;
+	QAction*			m_pMenuSupport;
 #ifdef WIN32
 	QAction*			m_pMenuAboutPH;
 #endif
@@ -129,6 +145,8 @@ private:
 	QMenu*				m_pTrayMenu;
 
 	bool				m_bExit;
+
+	QImage				m_TrayGraph;
 };
 
 extern CSettings*	theConf;

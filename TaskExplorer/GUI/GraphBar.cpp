@@ -37,39 +37,39 @@ CGraphBar::CGraphBar()
 	m_pMemoryPlot->AddPlot("Cache", Qt::blue, Qt::SolidLine, true);
 	m_pMemoryPlot->AddPlot("Physical", Qt::yellow, Qt::SolidLine, true);
 	m_pMemoryPlot->AddPlot("Limit", Qt::white, Qt::SolidLine);
-	m_pMemoryPlot->AddPlot("end", Qt::transparent, Qt::NoPen); // add a dummy curne that always stays at 0 in order to force autoscale to keep the lower bound always at 0
+	FixPlotScale(m_pMemoryPlot);
 	m_pMainLayout->addWidget(m_pMemoryPlot, row, column++);
 
 	m_pObjectPlot = new CIncrementalPlot();
 	m_pObjectPlot->SetLimit(limit);
 	m_pObjectPlot->AddPlot("Gdi", Qt::green, Qt::SolidLine);
 	m_pObjectPlot->AddPlot("User", Qt::red, Qt::SolidLine);
-	m_pObjectPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pObjectPlot);
 	m_pMainLayout->addWidget(m_pObjectPlot, row, column++);
 
 	m_pWindowsPlot = new CIncrementalPlot();
 	m_pWindowsPlot->SetLimit(limit);
 	m_pWindowsPlot->AddPlot("Wnd", Qt::green, Qt::SolidLine);
-	m_pWindowsPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pWindowsPlot);
 	m_pMainLayout->addWidget(m_pWindowsPlot, row, column++);
 
 	m_pHandledPlot = new CIncrementalPlot();
 	m_pHandledPlot->SetLimit(limit);
 	m_pHandledPlot->AddPlot("Handles", Qt::green, Qt::SolidLine);
-	m_pHandledPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pHandledPlot);
 	m_pMainLayout->addWidget(m_pHandledPlot, row, column++);
 
-	m_pGpuPlot = new CIncrementalPlot();
+	/*m_pGpuPlot = new CIncrementalPlot();
 	m_pGpuPlot->SetLimit(limit);
 	// todo
-	m_pGpuPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
-	m_pMainLayout->addWidget(m_pGpuPlot, row, column++);
+	FixPlotScale(m_pGpuPlot);
+	m_pMainLayout->addWidget(m_pGpuPlot, row, column++);*/
 
 	m_pMMapIoPlot = new CIncrementalPlot();
 	m_pMMapIoPlot->SetLimit(limit);
 	m_pMMapIoPlot->AddPlot("Read", Qt::green, Qt::SolidLine);
 	m_pMMapIoPlot->AddPlot("Write", Qt::red, Qt::SolidLine);
-	m_pMMapIoPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pMMapIoPlot);
 	m_pMainLayout->addWidget(m_pMMapIoPlot, row, column++);
 
 
@@ -80,15 +80,15 @@ CGraphBar::CGraphBar()
 	m_pFileIoPlot->AddPlot("Read", Qt::green, Qt::SolidLine);
 	m_pFileIoPlot->AddPlot("Write", Qt::red, Qt::SolidLine);
 	m_pFileIoPlot->AddPlot("Other", Qt::blue, Qt::SolidLine);
-	m_pFileIoPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pFileIoPlot);
 	m_pMainLayout->addWidget(m_pFileIoPlot, row, column++);
 
-	m_pDiskIoPlot = new CIncrementalPlot();
+	/*m_pDiskIoPlot = new CIncrementalPlot();
 	m_pDiskIoPlot->SetLimit(limit);
 	m_pDiskIoPlot->AddPlot("Read", Qt::green, Qt::SolidLine);
 	m_pDiskIoPlot->AddPlot("Write", Qt::red, Qt::SolidLine);
-	m_pDiskIoPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
-	m_pMainLayout->addWidget(m_pDiskIoPlot, row, column++);
+	FixPlotScale(m_pDiskIoPlot);
+	m_pMainLayout->addWidget(m_pDiskIoPlot, row, column++);*/
 
 	m_pSambaPlot = new CIncrementalPlot();
 	m_pSambaPlot->SetLimit(limit);
@@ -98,21 +98,21 @@ CGraphBar::CGraphBar()
 	m_pSambaPlot->AddPlot("SentServer", Qt::red, Qt::DashLine);
 	m_pSambaPlot->AddPlot("RecvClient", Qt::green, Qt::DotLine);
 	m_pSambaPlot->AddPlot("SentClient", Qt::red, Qt::DotLine);
-	m_pSambaPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pSambaPlot);
 	m_pMainLayout->addWidget(m_pSambaPlot, row, column++);
 
 	m_pNetworkPlot = new CIncrementalPlot();
 	m_pNetworkPlot->SetLimit(limit);
 	m_pNetworkPlot->AddPlot("Recv", Qt::green, Qt::SolidLine);
 	m_pNetworkPlot->AddPlot("Send", Qt::red, Qt::SolidLine);
-	m_pNetworkPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pNetworkPlot);
 	m_pMainLayout->addWidget(m_pNetworkPlot, row, column++);
 
 	m_pRasPlot = new CIncrementalPlot();
 	m_pRasPlot->SetLimit(limit);
 	m_pRasPlot->AddPlot("Recv", Qt::green, Qt::SolidLine);
 	m_pRasPlot->AddPlot("Send", Qt::red, Qt::SolidLine);
-	m_pRasPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pRasPlot);
 	m_pMainLayout->addWidget(m_pRasPlot, row, column++);
 
 	m_pCpuPlot = new CIncrementalPlot();
@@ -121,26 +121,32 @@ CGraphBar::CGraphBar()
 	m_pCpuPlot->AddPlot("User", Qt::green, Qt::SolidLine, true);
 	m_pCpuPlot->AddPlot("Kernel", Qt::red, Qt::SolidLine, true);
 	m_pCpuPlot->AddPlot("DPC", Qt::blue, Qt::SolidLine, true);
-	m_pCpuPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	FixPlotScale(m_pCpuPlot);
 	m_pMainLayout->addWidget(m_pCpuPlot, row, column++);
 
 }
-
 
 CGraphBar::~CGraphBar()
 {
 }
 
+void CGraphBar::FixPlotScale(CIncrementalPlot* pPlot)
+{
+	// add a dummy curve that always stays at 0 in order to force autoscale to keep the lower bound always at 0
+	pPlot->AddPlot("end", Qt::transparent, Qt::NoPen);
+	pPlot->AddPlotPoint("end", 0.1);
+	pPlot->AddPlotPoint("end", 0.0);
+}
 
 void CGraphBar::UpdateGraphs()
 {
 	SSysStats Stats = theAPI->GetStats();
 
-	m_pMemoryPlot->SetText(tr("Memory=%1%").arg((int)100*theAPI->GetPhysicalUsed()/theAPI->GetInstalledMemory()));
+	m_pMemoryPlot->SetText(tr("Memory=%1%").arg(theAPI->GetInstalledMemory() ? (int)100*theAPI->GetPhysicalUsed()/theAPI->GetInstalledMemory() : 0));
 	m_pMemoryPlot->SetRagne(theAPI->GetMemoryLimit());
 	m_pMemoryPlot->AddPlotPoint("Commited", theAPI->GetCommitedMemory());
-	m_pMemoryPlot->AddPlotPoint("Swapped", theAPI->GetPhysicalUsed() + theAPI->GetPagedMemory());
-	m_pMemoryPlot->AddPlotPoint("Cache", theAPI->GetPhysicalUsed());
+	m_pMemoryPlot->AddPlotPoint("Swapped", theAPI->GetPhysicalUsed() + theAPI->GetSwapedOutMemory());
+	m_pMemoryPlot->AddPlotPoint("Cache", theAPI->GetCacheMemory());
 	m_pMemoryPlot->AddPlotPoint("Physical", theAPI->GetPhysicalUsed() - theAPI->GetCacheMemory());
 	m_pMemoryPlot->AddPlotPoint("Limit", theAPI->GetInstalledMemory());
 
@@ -164,7 +170,7 @@ void CGraphBar::UpdateGraphs()
 	m_pHandledPlot->SetText(tr("Handles<%1").arg(FormatUnit(m_pHandledPlot->GetRangeMax())));
 	m_pHandledPlot->AddPlotPoint("Handles", theAPI->GetTotalHandles());
 
-	m_pGpuPlot->SetText(tr("Gpu=??%")); //.arg());
+	//m_pGpuPlot->SetText(tr("Gpu=??%")); //.arg());
 	//m_pGpuPlot // todo:
 
 	m_pMMapIoPlot->SetText(tr("MMapIO<%1").arg(FormatSize(m_pMMapIoPlot->GetRangeMax(), 0)));
@@ -185,13 +191,13 @@ void CGraphBar::UpdateGraphs()
 	m_pFileIoPlot->AddPlotPoint("Write", Stats.Io.WriteRate.Get());
 	m_pFileIoPlot->AddPlotPoint("Other", Stats.Io.OtherRate.Get());
 
-	m_pDiskIoPlot->SetText(tr("DiskIO<%1").arg(FormatSize(m_pDiskIoPlot->GetRangeMax(), 0)));
+	/*m_pDiskIoPlot->SetText(tr("DiskIO<%1").arg(FormatSize(m_pDiskIoPlot->GetRangeMax(), 0)));
 	QStringList DiskIoInfo;
 	DiskIoInfo.append(FormatUnit(Stats.Disk.ReadRate.Get(), 0));
 	DiskIoInfo.append(FormatUnit(Stats.Disk.WriteRate.Get(), 0));
 	m_pDiskIoPlot->SetTexts(DiskIoInfo);
 	m_pDiskIoPlot->AddPlotPoint("Read", Stats.Disk.ReadRate.Get());
-	m_pDiskIoPlot->AddPlotPoint("Write", Stats.Disk.WriteRate.Get());
+	m_pDiskIoPlot->AddPlotPoint("Write", Stats.Disk.WriteRate.Get());*/
 
 	m_pSambaPlot->SetText(tr("Samba<%1").arg(FormatSize(m_pSambaPlot->GetRangeMax(), 0)));
 	QStringList SambaInfo;

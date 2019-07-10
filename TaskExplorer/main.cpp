@@ -6,8 +6,10 @@
 #include "SVC\TaskService.h"
 #ifdef WIN32
 #include "API/Windows/ProcessHacker.h"
-void create_process_as_trusted_installer(wstring command_line);
+#include "API/Windows/WinAdmin.h"
 #include <codecvt>
+
+bool SkipUacRun(bool test_only = false);
 #endif
 
 int main(int argc, char *argv[])
@@ -28,13 +30,11 @@ int main(int argc, char *argv[])
 		}
 		else if (strcmp(argv[i], "-timeout") == 0)
 			timeOut = ++i < argc ? atoi(argv[i]) : 10000;
-#ifdef _DEBUG
 		else if (strcmp(argv[i], "-dbg_wait") == 0)
 		{
 			// add timeout?
 			WaitForDebugger();
 		}
-#endif
 		else if (strcmp(argv[i], "-runsvc") == 0)
 		{
 			run_svc = ++i < argc ? argv[i] : TASK_SERVICE_NAME;
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 #ifdef WIN32
 		else if (strcmp(argv[i], "-runasti") == 0)
 		{
-			if (!IsElevated()) 
+			if (!IsElevated() && !SkipUacRun()) 
 			{
 				return RestartElevated(argc, argv);
 			}
@@ -53,11 +53,12 @@ int main(int argc, char *argv[])
 		}
 #endif
     }
-		
 
-#ifdef WIN32
-	InitPH(bSvc);
-#endif
+	if (!bSvc && !IsElevated())
+	{
+		if (SkipUacRun())
+			return 0;
+	}
 
 	if (run_svc)
 	{
@@ -84,7 +85,6 @@ int main(int argc, char *argv[])
 	else
 	{
 		CTaskExplorer Wnd;
-		Wnd.show();
 		ret = QApplication::exec();
 	}
 
@@ -93,10 +93,6 @@ int main(int argc, char *argv[])
 
 	// note: if ran as a service teh instance wil have already been delted, but delete NULL is ok
 	delete QCoreApplication::instance();
-
-#ifdef WIN32
-	ClearPH();
-#endif
 
 	return ret;
 }

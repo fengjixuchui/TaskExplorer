@@ -1,6 +1,6 @@
 /*
  * Process Hacker -
- *   qt wrapper and support functions
+ *   qt wrapper and support functions based on thrdprv.c
  *
  * Copyright (C) 2010-2016 wj32
  * Copyright (C) 2019 David Xanatos
@@ -141,6 +141,17 @@ bool CWinThread::UpdateDynamicData(struct _SYSTEM_THREAD_INFORMATION* thread, qu
 		modified = TRUE;
 	}
 
+    // Update the GUI thread status.
+    {
+        GUITHREADINFO info = { sizeof(GUITHREADINFO) };
+        bool oldIsGuiThread = m_IsGuiThread;
+
+        m_IsGuiThread = !!GetGUIThreadInfo(m_ThreadId, &info);
+
+        if (m_IsGuiThread != oldIsGuiThread)
+            modified = TRUE;
+    }
+
     // Update the base priority increment.
     {
 		LONG basePriorityIncrement = THREAD_PRIORITY_ERROR_RETURN;
@@ -185,20 +196,6 @@ bool CWinThread::UpdateDynamicData(struct _SYSTEM_THREAD_INFORMATION* thread, qu
 
             modified = TRUE;
         }
-    }
-
-
-
-
-    // Update the GUI thread status.
-    {
-        GUITHREADINFO info = { sizeof(GUITHREADINFO) };
-        bool oldIsGuiThread = m_IsGuiThread;
-
-        m_IsGuiThread = !!GetGUIThreadInfo(m_ThreadId, &info);
-
-        if (m_IsGuiThread != oldIsGuiThread)
-            modified = TRUE;
     }
 
 	// update critical flag

@@ -1,6 +1,6 @@
 /*
  * Process Hacker -
- *   qt wrapper and support functions
+ *   qt wrapper and support functions based on svcsup.c
  *
  * Copyright (C) 2009-2015 wj32
  * Copyright (C) 2017 dmex
@@ -68,6 +68,12 @@ CWinService::CWinService(QObject *parent)
 
 	m_pModuleInfo = CModulePtr(new CWinModule());
 	connect(m_pModuleInfo.data(), SIGNAL(AsyncDataDone(bool, ulong, ulong)), this, SLOT(OnAsyncDataDone(bool, ulong, ulong)));
+}
+
+CWinService::CWinService(const QString& Name, QObject *parent)
+	: CWinService(parent)
+{
+	m_SvcName = Name;
 }
 
 CWinService::~CWinService()
@@ -176,6 +182,10 @@ bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE
 
 				PhFree(config);
 			}
+
+			PPH_STRING description = PhGetServiceDescription(serviceHandle);
+			if (description)
+				m_Description = CastPhString(description);
 
 			static PH_STRINGREF servicesKeyName = PH_STRINGREF_INIT(L"System\\CurrentControlSet\\Services\\");
 
@@ -480,4 +490,36 @@ STATUS CWinService::Delete(bool bForce)
 		return ERR(tr("Failed to delete service"), status);
     }
 	return OK;
+}
+
+static NTSTATUS PhpOpenService(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAccess, _In_opt_ PVOID Context)
+{
+	SC_HANDLE serviceHandle;
+	wstring* pName = ((wstring*)Context);
+
+	if (serviceHandle = PhOpenService((wchar_t*)pName->c_str(),DesiredAccess))
+	{
+		*Handle = serviceHandle;
+		return STATUS_SUCCESS;
+	}
+
+	return PhGetLastWin32ErrorAsNtStatus();
+}
+
+NTSTATUS PhpCloseServiceCallback(_In_opt_ PVOID Context)
+{
+	wstring* pName = ((wstring*)Context);
+
+	delete pName;
+
+	return STATUS_SUCCESS;
+}
+
+void CWinService::OpenPermissions()
+{
+	QWriteLocker Locker(&m_Mutex);
+
+	wstring* pName = new wstring;
+	*pName = m_SvcName.toStdWString();
+	PhEditSecurity(NULL, (wchar_t*)m_DisplayName.toStdWString().c_str(), L"Service", (PPH_OPEN_OBJECT)PhpOpenService, (PPH_CLOSE_OBJECT)PhpCloseServiceCallback, pName);
 }

@@ -13,9 +13,9 @@ CThreadsView::CThreadsView(QWidget *parent)
 	m_pMainLayout->setMargin(0);
 	this->setLayout(m_pMainLayout);
 
-	m_pFilterWidget = new QWidget();
-	m_pFilterWidget->setMinimumHeight(32);
-	m_pMainLayout->addWidget(m_pFilterWidget);
+	//m_pFilterWidget = new QWidget();
+	//m_pFilterWidget->setMinimumHeight(32);
+	//m_pMainLayout->addWidget(m_pFilterWidget);
 
 	m_pSplitter = new QSplitter();
 	m_pSplitter->setOrientation(Qt::Vertical);
@@ -79,12 +79,49 @@ CThreadsView::~CThreadsView()
 	theConf->SetBlob(objectName() + "/ThreadView_Columns", m_pThreadList->header()->saveState());
 }
 
-void CThreadsView::ShowThreads(const CProcessPtr& pProcess)
+void CThreadsView::ShowProcess(const CProcessPtr& pProcess)
 {
-	m_pCurProcess = pProcess;
+	if (m_pCurProcess != pProcess)
+	{
+		disconnect(this, SLOT(ShowThreads(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
 
-	m_pCurProcess->UpdateThreads();
+		m_pCurProcess = pProcess;
 
+		connect(m_pCurProcess.data(), SIGNAL(ThreadsUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)), this, SLOT(ShowThreads(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
+	}
+
+	Refresh();
+}
+
+void CThreadsView::SellectThread(quint64 ThreadId)
+{
+	QModelIndex Index = m_pThreadModel->FindIndex(ThreadId);
+	QModelIndex ModelIndex = m_pSortProxy->mapFromSource(Index);
+		
+	QModelIndex ModelL = m_pSortProxy->index(ModelIndex.row(), 0, ModelIndex.parent());
+	QModelIndex ModelR = m_pSortProxy->index(ModelIndex.row(), m_pSortProxy->columnCount()-1, ModelIndex.parent());
+	
+	QItemSelection SelectedItems;
+	SelectedItems.append(QItemSelectionRange(ModelL, ModelR));
+
+	m_pThreadList->selectionModel()->select(SelectedItems, QItemSelectionModel::ClearAndSelect);
+}
+
+void CThreadsView::Refresh()
+{
+	if (!m_pCurProcess)
+		return;
+
+	QTimer::singleShot(0, m_pCurProcess.data(), SLOT(UpdateThreads()));
+
+#ifdef WIN32
+	// Note: See coment in CWinProcess::UpdateThreads(), ... so windows we just call ShowThreads right away.
+	ShowThreads(QSet<quint64>(), QSet<quint64>(), QSet<quint64>());
+#endif
+}
+
+void CThreadsView::ShowThreads(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed)
+{
 	QMap<quint64, CThreadPtr> Threads = m_pCurProcess->GetThreadList();
 
 	m_pThreadModel->Sync(Threads);

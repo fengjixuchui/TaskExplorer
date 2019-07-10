@@ -8,9 +8,10 @@
 #include "ModulesView.h"
 #include "MemoryView.h"
 #include "JobView.h"
-#include "TokensView.h"
+#include "TokenView.h"
 #include "WindowsView.h"
 #include "EnvironmentView.h"
+#include "../SystemInfo/ServicesView.h"
 
 
 CTaskInfoView::CTaskInfoView(bool bAsWindow, QWidget* patent)
@@ -55,17 +56,18 @@ void CTaskInfoView::InitializeTabs()
 	m_pWindowsView = new CWindowsView(this);
 	AddTab(m_pWindowsView, tr("Windows"));
 
-	// todo
-	//m_pMemoryView = new CMemoryView(this);
-	//AddTab(m_pMemoryView, tr("Memory"));
-
-	// todo
-	//m_pTokensView = new CTokensView(this);
-	//AddTab(m_pTokensView, tr("Tokens"));
+	m_pMemoryView = new CMemoryView(this);
+	AddTab(m_pMemoryView, tr("Memory"));
 
 #ifdef WIN32
+	m_pTokenView = new CTokenView(this);
+	AddTab(m_pTokenView, tr("Token"));
+
 	m_pJobView = new CJobView(this);
 	AddTab(m_pJobView, tr("Job"));
+
+	m_pServiceView = new CServicesView(false, this);
+	AddTab(m_pServiceView, tr("Service"));
 #endif
 
 	m_pEnvironmentView = new CEnvironmentView(this);
@@ -78,35 +80,22 @@ void CTaskInfoView::ShowProcess(const CProcessPtr& pProcess)
 {
 	m_pCurProcess = pProcess;
 
-	Refresh();
+	OnTab(m_pTabs->currentIndex());
+}
+
+void CTaskInfoView::SellectThread(quint64 ThreadId)
+{
+	m_pTabs->setCurrentWidget(m_pThreadsView);
+	m_pThreadsView->SellectThread(ThreadId);
 }
 
 void CTaskInfoView::OnTab(int tabIndex)
 {
-	Refresh();
+	if (!m_pCurProcess.isNull())
+		QMetaObject::invokeMethod(m_pTabs->currentWidget(), "ShowProcess", Qt::AutoConnection, Q_ARG(const CProcessPtr&, m_pCurProcess));
 }
 
 void CTaskInfoView::Refresh()
 {
-	if (m_pCurProcess.isNull())
-		return;
-
-	if(m_pTabs->currentWidget() == m_pProcessView)
-		m_pProcessView->ShowProcess(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pSocketsView)
-		m_pSocketsView->ShowSockets(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pHandlesView)
-		m_pHandlesView->ShowHandles(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pThreadsView)
-		m_pThreadsView->ShowThreads(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pModulesView)
-		m_pModulesView->ShowModules(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pWindowsView)
-		m_pWindowsView->ShowWindows(m_pCurProcess);
-	//
-	//
-	else if(m_pTabs->currentWidget() == m_pJobView)
-		m_pJobView->ShowJob(m_pCurProcess);
-	else if(m_pTabs->currentWidget() == m_pEnvironmentView)
-		m_pEnvironmentView->ShowEnvVariables(m_pCurProcess);
+	QMetaObject::invokeMethod(m_pTabs->currentWidget(), "Refresh", Qt::AutoConnection);
 }

@@ -7,6 +7,7 @@
 #include "WndInfo.h"
 #include "AbstractTask.h"
 #include "IOStats.h"
+#include "MemoryInfo.h"
 
 struct STaskStatsEx : STaskStats
 {
@@ -23,15 +24,14 @@ public:
 	virtual ~CProcessInfo();
 
 	// Basic
-	virtual quint64 GetID() const						{ QReadLocker Locker(&m_Mutex); return m_ProcessId; }
-	virtual quint64 GetParentID() const					{ QReadLocker Locker(&m_Mutex); return m_ParentProcessId; }
+	virtual quint64 GetProcessId() const				{ QReadLocker Locker(&m_Mutex); return m_ProcessId; }
+	virtual quint64 GetParentId() const					{ QReadLocker Locker(&m_Mutex); return m_ParentProcessId; }
 	virtual QString GetName() const						{ QReadLocker Locker(&m_Mutex); return m_ProcessName; }
 
 	virtual bool ValidateParent(CProcessInfo* pParent) const = 0;
 
 	virtual QString GetArchString() const = 0;
 	virtual quint64 GetSessionID() const = 0;
-	virtual QString GetElevationString() const = 0;
 
 	virtual ulong GetSubsystem() const = 0;
 	virtual QString GetSubsystemString() const = 0; // on windows wls, etc... on linux wine or not
@@ -75,7 +75,6 @@ public:
 	virtual bool HasDebugger() const = 0;
 	virtual STATUS AttachDebugger() = 0;
 	virtual STATUS DetachDebugger() = 0;
-	virtual STATUS CreateDump(const QString& DumpPath) = 0;
 
 	virtual bool IsSystemProcess() const = 0;
 	virtual bool IsServiceProcess() const = 0;
@@ -126,6 +125,8 @@ public:
 	virtual QMap<QString, SEnvVar>	GetEnvVariables() const = 0;
 	virtual STATUS					DeleteEnvVariable(const QString& Name) = 0;
 	virtual STATUS					EditEnvVariable(const QString& Name, const QString& Value) = 0;
+
+	virtual QMap<quint64, CMemoryPtr> GetMemoryMap() const = 0;
 
 signals:
 	void			ThreadsUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);

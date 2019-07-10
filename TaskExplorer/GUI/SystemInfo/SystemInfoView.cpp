@@ -36,7 +36,7 @@ void CSystemInfoView::InitializeTabs()
 	m_pAllSocketsView = new CSocketsView(true, this);
 	AddTab(m_pAllSocketsView, tr("All Sockets"));
 
-	m_pServicesView = new CServicesView(this);
+	m_pServicesView = new CServicesView(true, this);
 	AddTab(m_pServicesView, tr("Services"));
 
 	m_pDriversView = new CDriversView(this);
@@ -52,10 +52,7 @@ void CSystemInfoView::OnTab(int tabIndex)
 
 void CSystemInfoView::Refresh()
 {
-	if (m_pTabs->currentWidget() == m_pSystemView)
-		m_pSystemView->ShowSystem();
-	else if (m_pTabs->currentWidget() == m_pAllFilesView)
-		m_pAllFilesView->ShowAllFiles();
+	QTimer::singleShot(0, m_pTabs->currentWidget(), SLOT(Refresh()));
 }
 
 #ifdef WIN32
