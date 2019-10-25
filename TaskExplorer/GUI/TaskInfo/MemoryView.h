@@ -2,10 +2,10 @@
 #include <qwidget.h>
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
-#include "..\..\API\SocketInfo.h"
-#include "..\Models\MemoryModel.h"
-#include "..\..\Common\SortFilterProxyModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../../API/SocketInfo.h"
+#include "../Models/MemoryModel.h"
+#include "../../Common/SortFilterProxyModel.h"
 
 class CMemoryFilterModel: public CSortFilterProxyModel
 {
@@ -50,11 +50,16 @@ public:
 	virtual ~CMemoryView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
-	void					Refresh();
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
+	void					Refresh() {} // only manual refresh
 
 private slots:
-	void					OnDoubleClicked(const QModelIndex& Index);
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
+	void					OnDoubleClicked();
+	void					OnRefresh();
+	void					OnSearch();
 
 	void					UpdateFilter();
 
@@ -73,6 +78,8 @@ protected:
 	
 	CProcessPtr				m_pCurProcess;
 
+	QMultiMap<quint64, CMemoryPtr> m_MemoryList;
+
 private:
 
 	QVBoxLayout*			m_pMainLayout;
@@ -81,12 +88,14 @@ private:
 	QHBoxLayout*			m_pFilterLayout;
 	QCheckBox*				m_pHideFree;
 	QPushButton*			m_pRefresh;
+	QPushButton*			m_pSearch;
 
 	QTreeViewEx*			m_pMemoryList;
 	CMemoryModel*			m_pMemoryModel;
 	CMemoryFilterModel*		m_pSortProxy;
 
 	//QMenu*					m_pMenu;
+	QAction*				m_pMenuEdit;
 	QAction*				m_pMenuSave;
 	QAction*				m_pMenuProtect;
 	QAction*				m_pMenuFree;

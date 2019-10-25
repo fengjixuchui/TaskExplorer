@@ -1,7 +1,8 @@
 #pragma once
 #include <qwidget.h>
 #include "Common/ListItemModel.h"
-#include "..\..\API\SocketInfo.h"
+#include "../../API/SocketInfo.h"
+#include "../../API/ProcessInfo.h"
 
 class CSocketModel : public CListItemModel
 {
@@ -11,7 +12,7 @@ public:
     CSocketModel(QObject *parent = 0);
 	~CSocketModel();
 
-	void			SetProcessFilter(const CProcessPtr& pProcess) { m_ProcessFilter = true; m_CurProcess = pProcess; }
+	void			SetProcessFilter(const QList<CProcessPtr>& Processes) { m_ProcessFilter = true; m_Processes = Processes; }
 
 	void			Sync(QMultiMap<quint64, CSocketPtr> SocketList);
 	
@@ -30,33 +31,34 @@ public:
 		eRemoteAddress,
 		eRemotePort,
 #ifdef WIN32
-		eOwner,
+		eOwnerService,
 #endif
 		eTimeStamp,
-		//eLocalHostname,
-		//eRemoteHostname,
+
 		eReceives,
 		eSends,
 		eReceiveBytes,
 		eSendBytes,
 		//eTotalBytes,
-		eReceivesDetla,
+		eReceivesDelta,
 		eSendsDelta,
 		eReceiveBytesDelta,
 		eSendBytesDelta,
 		//eTotalBytesDelta,
-#ifdef WIN32
-		eFirewallStatus,
-#endif
 		eReceiveRate,
 		eSendRate,
 		//eTotalRate,
+#ifdef WIN32
+		eFirewallStatus,
+#endif
+		//eLocalHostname,
+		eRemoteHostname,
 		eCount
 	};
 
 protected:
 	bool					m_ProcessFilter;
-	CProcessPtr				m_CurProcess;
+	QList<CProcessPtr>		m_Processes;
 
 	struct SSocketNode: SListNode
 	{

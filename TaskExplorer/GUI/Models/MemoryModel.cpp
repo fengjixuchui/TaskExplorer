@@ -10,26 +10,27 @@
 CMemoryModel::CMemoryModel(QObject *parent)
 :CTreeItemModel(parent)
 {
+	m_Root = MkNode(QVariant());
 }
 
 CMemoryModel::~CMemoryModel()
 {
 }
 
-QList<QVariant> CMemoryModel::MakeWndPath(const CMemoryPtr& pMemory, const QMap<quint64, CMemoryPtr>& ModuleList)
+QList<QVariant> CMemoryModel::MakeMemPath(const CMemoryPtr& pMemory, const QMap<quint64, CMemoryPtr>& ModuleList)
 {
-	QList<QVariant> list;
+	QList<QVariant> Path;
 	if (!pMemory->IsAllocationBase())
 	{
-		list.append(pMemory->GetAllocationBase());
+		Path.append(pMemory->GetAllocationBase());
 	}
-	return list;
+	return Path;
 }
 
 void CMemoryModel::Sync(const QMap<quint64, CMemoryPtr>& ModuleList)
 {
 	QMap<QList<QVariant>, QList<STreeNode*> > New;
-	QMap<QVariant, STreeNode*> Old = m_Map;
+	QHash<QVariant, STreeNode*> Old = m_Map;
 
 	foreach (const CMemoryPtr& pMemory, ModuleList)
 	{
@@ -38,9 +39,10 @@ void CMemoryModel::Sync(const QMap<quint64, CMemoryPtr>& ModuleList)
 		QModelIndex Index;
 		QList<QVariant> Path;
 		if(m_bTree)
-			Path = MakeWndPath(pMemory, ModuleList);
+			Path = MakeMemPath(pMemory, ModuleList);
 		
-		SMemoryNode* pNode = static_cast<SMemoryNode*>(Old.value(ID));
+		QHash<QVariant, STreeNode*>::iterator I = Old.find(ID);
+		SMemoryNode* pNode = I != Old.end() ? static_cast<SMemoryNode*>(I.value()) : NULL;
 		if(!pNode || pNode->Path != Path)
 		{
 			pNode = static_cast<SMemoryNode*>(MkNode(ID));
@@ -51,7 +53,7 @@ void CMemoryModel::Sync(const QMap<quint64, CMemoryPtr>& ModuleList)
 		}
 		else
 		{
-			Old[ID] = NULL;
+			I.value() = NULL;
 			Index = Find(m_Root, pNode);
 		}
 
@@ -88,20 +90,25 @@ void CMemoryModel::UpdateMemory(const CMemoryPtr& pMemory, SMemoryNode* pNode, Q
 
 
 	int RowColor = CTaskExplorer::eNone;
-	if (pMemory->IsExecutable()) RowColor = CTaskExplorer::eExecutable;
+	if (pMemory->IsMarkedForRemoval())		RowColor = CTaskExplorer::eToBeRemoved;
+	else if (pMemory->IsNewlyCreated())		RowColor = CTaskExplorer::eAdded;
+	else if (pMemory->IsExecutable())		RowColor = CTaskExplorer::eExecutable;
 #ifdef WIN32
-	else if (pWinMemory->IsBitmapRegion()) RowColor = CTaskExplorer::eElevated;
+	else if (pWinMemory->IsBitmapRegion())	RowColor = CTaskExplorer::eElevated;
 #endif
-	else if (pMemory->IsPrivate()) RowColor = CTaskExplorer::eUser;
+	else if (pMemory->IsPrivate())			RowColor = CTaskExplorer::eUser;
 
 	if (pNode->iColor != RowColor) {
 		pNode->iColor = RowColor;
-		pNode->Color = CTaskExplorer::GetColor(RowColor);
+		pNode->Color = CTaskExplorer::GetListColor(RowColor);
 		Changed = 2;
 	}
 
-	for(int section = eBaseAddress; section < columnCount(); section++)
+	for(int section = 0; section < columnCount(); section++)
 	{
+		if (!m_Columns.contains(section))
+			continue; // ignore columns which are hidden
+
 		QVariant Value;
 		switch(section)
 		{
@@ -129,7 +136,7 @@ void CMemoryModel::UpdateMemory(const CMemoryPtr& pMemory, SMemoryNode* pNode, Q
 
 			switch (section)
 			{
-				case eBaseAddress:	ColValue.Formated = "0x" + QString::number(Value.toULongLong(), 16); break;	
+				case eBaseAddress:	ColValue.Formated = FormatAddress(Value.toULongLong()); break;	
 
 				case eSize:
 

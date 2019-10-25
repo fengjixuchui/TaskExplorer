@@ -18,47 +18,44 @@ typedef QPair<QString,QString> StrPair;
 StrPair Split2(const QString& String, QString Separator = "=", bool Back = false);
 QStringList SplitStr(const QString& String, QString Separator);
 
+QString UnEscape(QString Text);
 
 QString FormatSize(quint64 Size, int Precision = 2);
+__inline QString FormatSizeEx(quint64 Size, bool bEx) { return bEx && (Size == 0) ? QString() : FormatSize(Size); }
+QString FormatRate(quint64 Size, int Precision = 2);
+__inline QString FormatRateEx(quint64 Size, bool bEx) { return bEx && (Size == 0) ? QString() : FormatRate(Size); }
 QString FormatUnit(quint64 Size, int Precision = 0);
-QString	FormatTime(quint64 Time);
+QString	FormatTime(quint64 Time, bool ms = false);
+QString	FormatNumber(quint64 Number);
+__inline QString FormatNumberEx(quint64 Number, bool bEx) { return bEx && (Number == 0) ? QString() : FormatNumber(Number); }
+QString	FormatAddress(quint64 Address, int length = 16);
 
-template<class T>
-struct SDelta
+
+inline bool operator < (const QHostAddress &key1, const QHostAddress &key2)
 {
-	SDelta()
-	{
-		Initialized = false;
-		Value = 0;
-		Delta = 0;
-	}
-	
-	void Init(T New) {
-		Initialized = true;
-		Delta = 0;
-		Value = New;
-	}
+	// Note: toIPv6Address also works for IPv4 addresses
+	Q_IPV6ADDR ip1 = key1.toIPv6Address();
+	Q_IPV6ADDR ip2 = key2.toIPv6Address();
+    return memcmp(&ip1, &ip2, sizeof(Q_IPV6ADDR)) < 0;
+}
 
-	void Update(T New) {
-		if (Initialized) {
-			//ASSERT(New >= Value); // todo
-			Delta = New - Value;
-		}
-		else
-			Initialized = true;
-		Value = New;
-	}
+template <typename T>
+QVariantList toVariantList( const QList<T> &list )
+{
+    QVariantList newList;
+    foreach( const T &item, list )
+        newList << item;
 
-	T Value;
-	T Delta;
+    return newList;
+}
 
-private:
-	bool Initialized;
-};
-
-typedef SDelta<quint64>	SDelta32;
-typedef SDelta<quint64>	SDelta64;
-
+template <typename T>
+QList<T> reversed( const QList<T> & in ) {
+    QList<T> result;
+    result.reserve( in.size() ); // reserve is new in Qt 4.7
+    std::reverse_copy( in.begin(), in.end(), std::back_inserter( result ) );
+    return result;
+}
 
 template <class T>
 class CScoped
@@ -86,6 +83,7 @@ bool ReadFromDevice(QIODevice* dev, char* data, int len, int timeout = 5000);
 
 void GrayScale (QImage& Image);
 
+QIcon MakeActionIcon(const QString& IconFile);
 QAction* MakeAction(QToolBar* pParent, const QString& IconFile, const QString& Text = "");
 QMenu* MakeMenu(QMenu* pParent, const QString& Text, const QString& IconFile = "");
 QAction* MakeAction(QMenu* pParent, const QString& Text, const QString& IconFile = "");

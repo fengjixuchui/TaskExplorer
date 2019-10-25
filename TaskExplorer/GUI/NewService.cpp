@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "NewService.h"
+#include "../Common/Settings.h"
 #ifdef WIN32
 #include "../API/Windows/ProcessHacker/PhSvc.h"
 #endif
@@ -8,15 +9,19 @@
 CNewService::CNewService(QWidget *parent)
 	: QMainWindow(parent)
 {
-	ui.setupUi(this);
+	QWidget* centralWidget = new QWidget();
+	ui.setupUi(centralWidget);
+	this->setCentralWidget(centralWidget);
 
+#ifdef WIN32
 	for (int i = 0; i < 10; i++)
 		ui.svcType->addItem((char*)PhpServiceTypePairs[i].Key, (quint64)PhpServiceTypePairs[i].Value);
 	for (int i = 0; i < 5; i++)
 		ui.startType->addItem((char*)PhpServiceStartTypePairs[i].Key, (quint64)PhpServiceStartTypePairs[i].Value);
 	for (int i = 0; i < 4; i++)
 		ui.errorControl->addItem((char*)PhpServiceErrorControlPairs[i].Key, (quint64)PhpServiceErrorControlPairs[i].Value);
-	
+#endif
+
 	ui.svcType->setCurrentIndex(2); // "Own Process"
 	ui.startType->setCurrentIndex(4); // "Demand Start"
 	ui.errorControl->setCurrentIndex(0); // "Ignore"
@@ -24,6 +29,13 @@ CNewService::CNewService(QWidget *parent)
 	connect(ui.browseBtn, SIGNAL(pressed()), this, SLOT(OnBrowse()));
 	connect(ui.buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
 	connect(ui.buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
+
+	restoreGeometry(theConf->GetBlob("NewServiceWindow/Window_Geometry"));
+}
+
+CNewService::~CNewService()
+{
+	theConf->SetBlob("NewServiceWindow/Window_Geometry", saveGeometry());
 }
 
 void CNewService::closeEvent(QCloseEvent *e)
@@ -67,8 +79,11 @@ void CNewService::accept()
 
 	if(win32Result != ERROR_SUCCESS)
 		QMessageBox::warning(NULL, "TaskExplorer", tr("Failed to create service, error: %1").arg(win32Result));
-	else 
+	else
+	{
+		QMessageBox::information(NULL, "TaskExplorer", tr("Successfully creted service: %1").arg(ui.scvName->text()));
 		this->close();
+	}
 #endif
 }
 

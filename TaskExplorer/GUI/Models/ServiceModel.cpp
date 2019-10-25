@@ -12,6 +12,7 @@ CServiceModel::CServiceModel(QObject *parent)
 #ifdef WIN32
 	m_ShowDriver = true;
 #endif
+	m_bUseIcons = true;
 }
 
 CServiceModel::~CServiceModel()
@@ -21,7 +22,7 @@ CServiceModel::~CServiceModel()
 void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 {
 	QList<SListNode*> New;
-	QMap<QVariant, SListNode*> Old = m_Map;
+	QHash<QVariant, SListNode*> Old = m_Map;
 
 	foreach (const CServicePtr& pService, ServiceList)
 	{
@@ -35,7 +36,8 @@ void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 		QVariant ID = pService->GetName();
 
 		int Row = -1;
-		SServiceNode* pNode = static_cast<SServiceNode*>(Old[ID]);
+		QHash<QVariant, SListNode*>::iterator I = Old.find(ID);
+		SServiceNode* pNode = I != Old.end() ? static_cast<SServiceNode*>(I.value()) : NULL;
 		if(!pNode)
 		{
 			pNode = static_cast<SServiceNode*>(MkNode(ID));
@@ -45,19 +47,26 @@ void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 		}
 		else
 		{
-			Old[ID] = NULL;
-			Row = m_List.indexOf(pNode);
+			I.value() = NULL;
+			Row = GetRow(pNode);
 		}
 
 		int Col = 0;
 		bool State = false;
 		int Changed = 0;
 
+		CModulePtr pModule = pService->GetModuleInfo();
+
 		// Note: icons are loaded asynchroniusly
 #ifdef WIN32
-		if (!pNode->Icon.isValid())
+		if (m_bUseIcons && !pNode->Icon.isValid() && m_Columns.contains(eService))
 		{
-			QPixmap Icon = pWinService->IsDriver() ? g_DllIcon.pixmap(16,16) : pService->GetModuleInfo()->GetFileIcon();
+			QPixmap Icon;
+			if (pWinService->IsDriver())
+				Icon = g_DllIcon.pixmap(16, 16);
+			else if (pModule)
+				Icon = pModule->GetFileIcon(); 
+
 			if (!Icon.isNull()) {
 				Changed = 1; // set change for first column
 				pNode->Icon = Icon;
@@ -69,12 +78,12 @@ void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 		if (pService->IsMarkedForRemoval())			RowColor = CTaskExplorer::eToBeRemoved;
 		else if (pService->IsNewlyCreated())		RowColor = CTaskExplorer::eAdded;
 #ifdef WIN32
-		else if (pWinService->IsDriver())			RowColor = CTaskExplorer::eElevated;
+		else if (pWinService->IsDriver())			RowColor = CTaskExplorer::eDriver;
 #endif
 
 		if (pNode->iColor != RowColor) {
 			pNode->iColor = RowColor;
-			pNode->Color = CTaskExplorer::GetColor(RowColor);
+			pNode->Color = CTaskExplorer::GetListColor(RowColor);
 			Changed = 2;
 		}
 
@@ -85,8 +94,11 @@ void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 		}
 
 
-		for(int section = eService; section < columnCount(); section++)
+		for(int section = 0; section < columnCount(); section++)
 		{
+			if (!m_Columns.contains(section))
+				continue; // ignore columns which are hidden
+
 			QVariant Value;
 			switch(section)
 			{
@@ -102,9 +114,9 @@ void CServiceModel::Sync(QMap<QString, CServicePtr> ServiceList)
 				case ePID:					Value = (int)pService->GetPID(); break;
 				case eFileName:				Value = pService->GetFileName(); break;
 #ifdef WIN32
-				case eDescription:			Value = pService->GetModuleInfo()->GetFileInfo("Description"); break;
-				case eCompanyName:			Value = pService->GetModuleInfo()->GetFileInfo("CompanyName"); break;
-				case eVersion:				Value = pService->GetModuleInfo()->GetFileInfo("FileVersion"); break;
+				case eDescription:			Value = pModule ? pModule->GetFileInfo("Description") : ""; break;
+				case eCompanyName:			Value = pModule ? pModule->GetFileInfo("CompanyName") : ""; break;
+				case eVersion:				Value = pModule ? pModule->GetFileInfo("FileVersion") : ""; break;
 				case eErrorControl:			Value = pWinService->GetErrorControlString(); break;
 				case eGroupe:				Value = pWinService->GetGroupeName(); break;
 #endif

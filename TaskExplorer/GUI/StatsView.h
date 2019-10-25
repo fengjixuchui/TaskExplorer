@@ -3,9 +3,9 @@
 #include "../Common/TreeViewEx.h"
 #include "../Common/TreeWidgetEx.h"
 #include "../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
+#include "../API/ProcessInfo.h"
 #ifdef WIN32
-#include "../../API/Windows/WinProcess.h"
+#include "../API/Windows/WinProcess.h"
 #endif
 
 class CStatsView : public CPanelView
@@ -25,11 +25,14 @@ public slots:
 
 	//void					OnMenu(const QPoint &point);
 
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					ShowSystem();
 #ifdef WIN32
 	void					ShowJob(const CWinJobPtr& pCurJob);
 #endif
+
+private slots:
+	void					SetFilter(const QRegExp& Exp, bool bHighLight = false, int Col = -1); // -1 = any
 
 protected:
 	//virtual void				OnMenu(const QPoint& Point);
@@ -52,7 +55,7 @@ private:
 		eRate,
 		eDelta,
 		ePeak,
-		eLimit,
+		//eLimit,
 		eColCount
 	};
 
@@ -66,15 +69,20 @@ private:
 	QTreeWidgetItem*		m_pUserTime;				//	###						###
 	QTreeWidgetItem*		m_pTotalTime;				//	###						###
 	QTreeWidgetItem*		m_pContextSwitches;			//	###						###
+	QTreeWidgetItem*		m_pInterrupts;				//	###						###
+	QTreeWidgetItem*		m_pDPCs;					//	###						###
+	QTreeWidgetItem*		m_pSysCalls;				//	###						###
 
 	QTreeWidgetItem*		m_pMemory;
 	QTreeWidgetItem*		m_pPrivateBytes;			//			###				###
 	QTreeWidgetItem*		m_pVirtualSize;				//			###						###
 	QTreeWidgetItem*		m_pPageFaults;				//	###						###
+	QTreeWidgetItem*		m_pHardFaults;				//	###						###
 	QTreeWidgetItem*		m_pCommitCharge;			//			###						###		###
 	QTreeWidgetItem*		m_pWorkingSet;				//			###
 	QTreeWidgetItem*		m_pPrivateWS;				//			###
-	QTreeWidgetItem*		m_pSharedWS;				//			###								###
+	QTreeWidgetItem*		m_pShareableWS;				//			###						
+	QTreeWidgetItem*		m_pSharedWS;				//			###						
 	QTreeWidgetItem*		m_pPagedPool;				//			###						###
 	QTreeWidgetItem*		m_pNonPagedPool;			//			###						###
 
@@ -95,11 +103,18 @@ private:
 
 	QTreeWidgetItem*		m_pOther;
 	QTreeWidgetItem*		m_pProcesses;				//	###	
-	QTreeWidgetItem*		m_pThreads;					//	###	
+	QTreeWidgetItem*		m_pThreads;					//	###								###
 	QTreeWidgetItem*		m_pHandles;					//	###								###
 	QTreeWidgetItem*		m_pGdiObjects;				//	###
 	QTreeWidgetItem*		m_pUserObjects;				//	###
 	QTreeWidgetItem*		m_pWndObjects;				//	###
+	
+	QTreeWidgetItem*		m_pUpTime;					//	###
+
+	QTreeWidgetItem*		m_pRunningTime;				//	###
+	QTreeWidgetItem*		m_pSuspendTime;				//	###
+	QTreeWidgetItem*		m_pHangCount;				//	###
+	QTreeWidgetItem*		m_pGhostCount;				//	###
 	
 
 	//QMenu*					m_pMenu;

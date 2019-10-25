@@ -3,12 +3,12 @@
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/TreeWidgetEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
-#include "..\Models\ThreadModel.h"
-#include "..\..\Common\SortFilterProxyModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../Models/ThreadModel.h"
+#include "../../Common/SortFilterProxyModel.h"
 #include "StackView.h"
 #include "../TaskView.h"
-#include "../Common/HistoryGraph.h"
+#include "../../Common/HistoryGraph.h"
 
 class CThreadsView : public CTaskView
 {
@@ -18,11 +18,14 @@ public:
 	virtual ~CThreadsView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					SellectThread(quint64 ThreadId);
 	void					Refresh();
 
 private slots:
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	void					ShowThreads(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
 
 	void					OnUpdateHistory();
@@ -33,6 +36,11 @@ private slots:
 	//void					OnMenu(const QPoint &point);
 
 	void					OnThreadAction();
+	void					OnThreadToken();
+
+	void					OnPermissions();
+
+	void					ShowStack(const CStackTracePtr& StackTrace);
 
 protected:
 	virtual QList<CTaskPtr>		GetSellectedTasks();
@@ -43,8 +51,23 @@ protected:
 	//virtual QAbstractItemModel* GetModel()				{ return m_pHandleModel; }
 	//virtual QModelIndex			MapToSource(const QModelIndex& Model) { return m_pSortProxy->mapToSource(Model); }
 
-	CProcessPtr				m_pCurProcess;
+	enum EView
+	{
+		eNone,
+		eSingle,
+		eMulti
+	};
+
+	virtual void			SwitchView(EView ViewMode);
+
+	EView					m_ViewMode;
+
+	QList<CProcessPtr>		m_Processes;
+	//int						m_PendingUpdates;
 	CThreadPtr				m_pCurThread;
+	QMap<quint64, CThreadPtr> m_Threads;
+
+	quint64					m_CurStackTraceJob;
 
 private:
 	QVBoxLayout*			m_pMainLayout;
@@ -56,18 +79,21 @@ private:
 	QTreeViewEx*			m_pThreadList;
 	CThreadModel*			m_pThreadModel;
 	QSortFilterProxyModel*	m_pSortProxy;
-	QMap<quint64, QPair<QPointer<CHistoryGraph>, QPersistentModelIndex> > m_CPU_History;
+
+	QMap<quint64, CHistoryGraph*> m_CPU_Graphs;
+	QMap<quint64, QPair<QPointer<CHistoryWidget>, QPersistentModelIndex> > m_CPU_History;
 
 	CStackView*				m_pStackView;
 
 	//QMenu*					m_pMenu;
 
 #ifdef WIN32
+	QMenu*					m_pMiscMenu;
 	QAction*				m_pCancelIO;
 	//QAction*				m_pAnalyze;
 	QAction*				m_pCritical;
-	//QAction*				m_pPermissions;
-	//QAction*				m_pToken;
+	QAction*				m_pToken;
+	QAction*				m_pPermissions;
 #endif
 	//QAction*				m_pWindows;
 

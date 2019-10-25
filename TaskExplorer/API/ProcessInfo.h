@@ -6,13 +6,28 @@
 #include "HandleInfo.h"
 #include "WndInfo.h"
 #include "AbstractTask.h"
-#include "IOStats.h"
+#include "MiscStats.h"
 #include "MemoryInfo.h"
+#include "SocketInfo.h"
+#include "DnsEntry.h"
+
+#ifdef WIN32
+#undef GetUserName
+#endif
 
 struct STaskStatsEx : STaskStats
 {
-	SDelta32 		PageFaultsDelta;
+	SDelta32_64 	PageFaultsDelta;
+	SDelta32_64 	HardFaultsDelta;
 	SDelta64 		PrivateBytesDelta;
+};
+
+struct SGpuStats
+{
+	STimeUsage	GpuTimeUsage;
+	quint64		GpuDedicatedUsage;
+	quint64		GpuSharedUsage;
+	QString		GpuAdapter;
 };
 
 class CProcessInfo: public CAbstractTask
@@ -33,42 +48,39 @@ public:
 	virtual QString GetArchString() const = 0;
 	virtual quint64 GetSessionID() const = 0;
 
-	virtual ulong GetSubsystem() const = 0;
+	virtual quint16 GetSubsystem() const = 0;
 	virtual QString GetSubsystemString() const = 0; // on windows wls, etc... on linux wine or not
 
 	// Parameters
 	virtual QString GetFileName() const					{ QReadLocker Locker(&m_Mutex); return m_FileName; }
-	virtual QString GetCommandLine() const				{ QReadLocker Locker(&m_Mutex); return m_CommandLine; }
-	virtual QString GetWorkingDirectory() const			{ QReadLocker Locker(&m_Mutex); return m_WorkingDirectory; }
+	virtual QString GetCommandLineStr() const			{ QReadLocker Locker(&m_Mutex); return m_CommandLine; }
+	virtual QString GetWorkingDirectory() const = 0;
 
 	// Other fields
 	virtual QString GetUserName() const					{ QReadLocker Locker(&m_Mutex); return m_UserName; }
 
 	// Dynamic
-	virtual ulong GetNumberOfThreads() const			{ QReadLocker Locker(&m_Mutex); return m_NumberOfThreads; }
-	virtual ulong GetNumberOfHandles() const			{ QReadLocker Locker(&m_Mutex); return m_NumberOfHandles; }
+	virtual quint32 GetNumberOfThreads() const			{ QReadLocker Locker(&m_Mutex); return m_NumberOfThreads; }
+	virtual quint32 GetNumberOfHandles() const			{ QReadLocker Locker(&m_Mutex); return m_NumberOfHandles; }
 
-	virtual quint64 GetWorkingSetPrivateSize() const	{ QReadLocker Locker(&m_Mutex); return m_WorkingSetPrivateSize; }
-	virtual ulong GetPeakNumberOfThreads() const		{ QReadLocker Locker(&m_Mutex); return m_PeakNumberOfThreads; }
-	virtual ulong GetHardFaultCount() const				{ QReadLocker Locker(&m_Mutex); return m_HardFaultCount; }
+	virtual quint32 GetPeakNumberOfThreads() const		{ QReadLocker Locker(&m_Mutex); return m_PeakNumberOfThreads; }
+	virtual quint32 GetPeakNumberOfHandles() const = 0;
 
-	virtual quint64 GetPeakPrivateBytes() const = 0;
-	virtual quint64 GetWorkingSetSize() const = 0;
-	virtual quint64 GetPeakWorkingSetSize() const = 0;
-	virtual quint64 GetPrivateWorkingSetSize() const = 0;
+	virtual quint64 GetPeakPrivateBytes() const			{ QReadLocker Locker(&m_Mutex); return m_PeakPagefileUsage; }
+	virtual quint64 GetWorkingSetSize() const			{ QReadLocker Locker(&m_Mutex); return m_WorkingSetSize; }
+	virtual quint64 GetPeakWorkingSetSize() const		{ QReadLocker Locker(&m_Mutex); return m_PeakWorkingSetSize; }
+	virtual quint64 GetPrivateWorkingSetSize() const	{ QReadLocker Locker(&m_Mutex); return m_WorkingSetPrivateSize; }
+	virtual quint64 GetVirtualSize() const				{ QReadLocker Locker(&m_Mutex); return m_VirtualSize; }
+	virtual quint64 GetPeakVirtualSize() const			{ QReadLocker Locker(&m_Mutex); return m_PeakVirtualSize; }
+	//quint32 GetPageFaultCount() const					{ QReadLocker Locker(&m_Mutex); return m_PageFaultCount; }
+
 	virtual quint64 GetSharedWorkingSetSize() const = 0;
 	virtual quint64 GetShareableWorkingSetSize() const = 0;
-	virtual quint64 GetVirtualSize() const = 0;
-	virtual quint64 GetPeakVirtualSize() const = 0;
-	virtual quint32 GetPageFaultCount() const = 0;
-	virtual quint64 GetPagedPool() const = 0;
-	virtual quint64 GetPeakPagedPool() const = 0;
-	virtual quint64 GetNonPagedPool() const = 0;
-	virtual quint64 GetPeakNonPagedPool() const = 0;
 	virtual quint64 GetMinimumWS() const = 0;
 	virtual quint64 GetMaximumWS() const = 0;
 
 	virtual STaskStatsEx GetCpuStats() const			{ QReadLocker Locker(&m_StatsMutex); return m_CpuStats; }
+	virtual SGpuStats GetGpuStats() const				{ QReadLocker Locker(&m_StatsMutex); m_GpuUpdateCounter = 0; return m_GpuStats; }
 
 	virtual QString GetStatusString() const = 0;
 
@@ -81,21 +93,34 @@ public:
 	virtual bool IsUserProcess() const = 0;
 	virtual bool IsElevated() const = 0;
 
-	virtual SProcStats	GetStats() const				{ QReadLocker Locker(&m_StatsMutex); return m_Stats; }
+	virtual void SetNetworkUsageFlag(quint64 uFlag)			{ QWriteLocker Locker(&m_StatsMutex); m_NetworkUsageFlags |= uFlag; }
+	virtual int GetNetworkUsageFlags() const				{ QReadLocker Locker(&m_StatsMutex); return m_NetworkUsageFlags; }
+	virtual QString GetNetworkUsageString() const;
 
-	virtual CModulePtr GetModuleInfo()					{ QReadLocker Locker(&m_Mutex); return m_pModuleInfo; }
+	virtual void UpdateDns(const QString& HostName, const QList<QHostAddress>& Addresses);
+	virtual QString GetHostName(const QHostAddress& Address);
+
+	virtual SProcStats	GetStats() const					{ QReadLocker Locker(&m_StatsMutex); return m_Stats; }
+
+	virtual CModulePtr GetModuleInfo() const				{ QReadLocker Locker(&m_Mutex); return m_pModuleInfo; }
 
 	// Threads
-	virtual QMap<quint64, CThreadPtr> GetThreadList()	{ QReadLocker Locker(&m_ThreadMutex); return m_ThreadList; }
+	virtual QMap<quint64, CThreadPtr>	GetThreadList() const	{ QReadLocker Locker(&m_ThreadMutex); return m_ThreadList; }
 
 	// Handles
-	virtual QMap<quint64, CHandlePtr> GetHandleList()	{ QReadLocker Locker(&m_HandleMutex); return m_HandleList; }
+	virtual QMap<quint64, CHandlePtr>	GetHandleList() const	{ QReadLocker Locker(&m_HandleMutex); return m_HandleList; }
 	
 	// Modules
-	virtual QMap<quint64, CModulePtr> GetModleList()	{ QReadLocker Locker(&m_ModuleMutex); return m_ModuleList; }
+	virtual QMap<quint64, CModulePtr>	GetModuleList() const	{ QReadLocker Locker(&m_ModuleMutex); return m_ModuleList; }
 
 	// Windows
-	virtual QMap<quint64, CWndPtr>	  GetWindowList()	{ QReadLocker Locker(&m_WindowMutex); return m_WindowList; }
+	virtual QMap<quint64, CWndPtr>		GetWindowList() const	{ QReadLocker Locker(&m_WindowMutex); return m_WindowList; }
+	virtual CWndPtr						GetWindowByHwnd(quint64 hwnd) const { QReadLocker Locker(&m_WindowMutex); return m_WindowList.value(hwnd); }
+
+	// Sockets
+	virtual void						AddSocket(const CSocketPtr& pSocket) { QWriteLocker Locker(&m_SocketMutex); m_SocketList.insert((quint64)pSocket.data(), pSocket.toWeakRef()); }
+	virtual void						RemoveSocket(const CSocketPtr& pSocket) { QWriteLocker Locker(&m_SocketMutex); m_SocketList.remove((quint64)pSocket.data()); }
+	virtual QMap<quint64, CSocketRef>	GetSocketList() const	{ QReadLocker Locker(&m_SocketMutex); return m_SocketList; }
 
 	struct SEnvVar
 	{
@@ -128,6 +153,12 @@ public:
 
 	virtual QMap<quint64, CMemoryPtr> GetMemoryMap() const = 0;
 
+	virtual QList<CWndPtr> GetWindows() const = 0;
+	virtual CWndPtr	GetMainWindow() const = 0;
+	
+
+	virtual STATUS LoadModule(const QString& Path) = 0;
+
 signals:
 	void			ThreadsUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
 	void			HandlesUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
@@ -149,24 +180,34 @@ protected:
 	// Parameters
 	QString							m_FileName;
 	QString							m_CommandLine;
-	QString							m_WorkingDirectory;
+	//QString							m_WorkingDirectory;
 	
 	// Other fields
 	QString							m_UserName;
 
 	// Dynamic
-	ulong							m_NumberOfThreads;
-	ulong							m_NumberOfHandles;
+	quint32							m_NumberOfThreads;
+	quint32							m_NumberOfHandles;
 
+	quint32							m_PeakNumberOfThreads;
+
+	quint64							m_PeakPagefileUsage;
+	quint64							m_WorkingSetSize;
+	quint64							m_PeakWorkingSetSize;
 	quint64							m_WorkingSetPrivateSize;
-	ulong							m_PeakNumberOfThreads;
-	ulong							m_HardFaultCount;
+	quint64							m_VirtualSize;
+	quint64							m_PeakVirtualSize;
+	//quint32							m_PageFaultCount;
 
+	quint32							m_NetworkUsageFlags;
 
 	// I/O stats
 	mutable QReadWriteLock			m_StatsMutex;
 	SProcStats						m_Stats;
 	STaskStatsEx					m_CpuStats;
+	SGpuStats						m_GpuStats;
+	volatile mutable quint32		m_GpuUpdateCounter;
+
 
 	// module info
 	CModulePtr						m_pModuleInfo;
@@ -187,6 +228,14 @@ protected:
 	mutable QReadWriteLock			m_WindowMutex;
 	QMap<quint64, CWndPtr>			m_WindowList;
 
+	// Sockets
+	mutable QReadWriteLock			m_SocketMutex;
+	QMap<quint64, CSocketRef>		m_SocketList;
+
+	// Dns Log
+	mutable QReadWriteLock			m_DnsMutex;
+	QMap<QString, CDnsLogEntryPtr>		m_DnsLog;
+	QMultiMap<QHostAddress, QString>	m_DnsRevLog;
 };
 
 typedef QSharedPointer<CProcessInfo> CProcessPtr;

@@ -4,6 +4,7 @@
 #include "../../Common/Common.h"
 #ifdef WIN32
 #include "../../API/Windows/WinSocket.h"
+#include "../../API/Windows/WindowsAPI.h"
 #endif
 
 CSocketModel::CSocketModel(QObject *parent)
@@ -19,20 +20,24 @@ CSocketModel::~CSocketModel()
 void CSocketModel::Sync(QMultiMap<quint64, CSocketPtr> SocketList)
 {
 	QList<SListNode*> New;
-	QMap<QVariant, SListNode*> Old = m_Map;
+	QHash<QVariant, SListNode*> Old = m_Map;
+	
+	bool IsMonitoringETW = ((CWindowsAPI*)theAPI)->IsMonitoringETW();
+	bool bClearZeros = theConf->GetBool("Options/ClearZeros", true);
 
 	foreach (const CSocketPtr& pSocket, SocketList)
 	{
 		if (m_ProcessFilter)
 		{
-			if (pSocket->GetProcess() != m_CurProcess)
+			if (!m_Processes.contains(pSocket->GetProcess().toStrongRef().staticCast<CProcessInfo>()))
 				continue;
 		}
 
 		QVariant ID = (quint64)pSocket.data();
 
 		int Row = -1;
-		SSocketNode* pNode = static_cast<SSocketNode*>(Old[ID]);
+		QHash<QVariant, SListNode*>::iterator I = Old.find(ID);
+		SSocketNode* pNode = I != Old.end() ? static_cast<SSocketNode*>(I.value()) : NULL;
 		if(!pNode)
 		{
 			pNode = static_cast<SSocketNode*>(MkNode(ID));
@@ -42,8 +47,8 @@ void CSocketModel::Sync(QMultiMap<quint64, CSocketPtr> SocketList)
 		}
 		else
 		{
-			Old[ID] = NULL;
-			Row = m_List.indexOf(pNode);
+			I.value() = NULL;
+			Row = GetRow(pNode);
 		}
 
 #ifdef WIN32
@@ -55,12 +60,13 @@ void CSocketModel::Sync(QMultiMap<quint64, CSocketPtr> SocketList)
 		int Changed = 0;
 
 		// Note: icons are loaded asynchroniusly
-		if (!pNode->Icon.isValid())
+		if (m_bUseIcons && !pNode->Icon.isValid() && m_Columns.contains(eProcess))
 		{
-			CProcessPtr pProcess = pNode->pSocket->GetProcess();
-			if (!pProcess.isNull())
+			CProcessPtr pProcess = pNode->pSocket->GetProcess().toStrongRef().staticCast<CProcessInfo>();
+			CModulePtr pModule = pProcess ? pProcess->GetModuleInfo() : CModulePtr();
+			if (pModule)
 			{
-				QPixmap Icon = pProcess->GetModuleInfo()->GetFileIcon();
+				QPixmap Icon = pModule->GetFileIcon();
 				if (!Icon.isNull()) {
 					Changed = 1; // set change for first column
 					pNode->Icon = Icon;
@@ -69,55 +75,66 @@ void CSocketModel::Sync(QMultiMap<quint64, CSocketPtr> SocketList)
 		}
 
 		int RowColor = CTaskExplorer::eNone;
-		if (pSocket->IsMarkedForRemoval())		RowColor = CTaskExplorer::eToBeRemoved;
+		if (pSocket->WasBlocked())				RowColor = CTaskExplorer::eDangerous;
+		else if (pSocket->IsMarkedForRemoval())	RowColor = CTaskExplorer::eToBeRemoved;
 		else if (pSocket->IsNewlyCreated())		RowColor = CTaskExplorer::eAdded;
 		
 		if (pNode->iColor != RowColor) {
 			pNode->iColor = RowColor;
-			pNode->Color = CTaskExplorer::GetColor(RowColor);
+			pNode->Color = CTaskExplorer::GetListColor(RowColor);
 			Changed = 2;
 		}
 
 
 		SSockStats Stats = pSocket->GetStats();
 
-		for(int section = eProcess; section < columnCount(); section++)
+		for(int section = 0; section < columnCount(); section++)
 		{
+			if (!m_Columns.contains(section))
+				continue; // ignore columns which are hidden
+
 			QVariant Value;
 			switch(section)
 			{
 				case eProcess:			Value = pSocket->GetProcessName(); break;
-				case eProtocol:			Value = pSocket->GetProtocolString(); break; 
-				case eState:			Value = pSocket->GetStateString(); break; 
+				case eProtocol:			Value = (quint32)pSocket->GetProtocolType(); break; 
+				case eState:			Value = (quint32)pSocket->GetState(); break; 
 				case eLocalAddress:		Value = pSocket->GetLocalAddress().toString(); break;
 				case eLocalPort:		Value = pSocket->GetLocalPort(); break; 
 				case eRemoteAddress:	Value = pSocket->GetRemoteAddress().toString(); break; 
 				case eRemotePort:		Value = pSocket->GetRemotePort(); break; 
 #ifdef WIN32
-				case eOwner:			Value = pWinSock->GetOwnerServiceName(); break; 
+				case eOwnerService:		Value = pWinSock->GetOwnerServiceName(); break; 
 #endif
 				case eTimeStamp:		Value = pSocket->GetCreateTimeStamp(); break;
 				//case eLocalHostname:	Value = ; break; 
-				//case eRemoteHostname:	Value = ; break; 
+				case eRemoteHostname:	Value = pSocket->GetRemoteHostName(); break; 
+
 				case eReceives:			Value = Stats.Net.ReceiveCount; break; 
 				case eSends:			Value = Stats.Net.SendCount; break; 
 				case eReceiveBytes:		Value = Stats.Net.ReceiveRaw; break; 
 				case eSendBytes:		Value = Stats.Net.SendRaw; break; 
 				//case eTotalBytes:		Value = ; break; 
-				case eReceivesDetla:	Value = Stats.Net.ReceiveDelta.Delta; break; 
+				case eReceivesDelta:	Value = Stats.Net.ReceiveDelta.Delta; break; 
 				case eSendsDelta:		Value = Stats.Net.SendDelta.Delta; break; 
 				case eReceiveBytesDelta:Value = Stats.Net.ReceiveRawDelta.Delta; break; 
 				case eSendBytesDelta:	Value = Stats.Net.SendRawDelta.Delta; break; 
 				//case eTotalBytesDelta:	Value = ; break; 
-#ifdef WIN32
-				case eFirewallStatus:	Value = pWinSock->GetFirewallStatus(); break; 
-#endif
 				case eReceiveRate:		Value = Stats.Net.ReceiveRate.Get(); break; 
 				case eSendRate:			Value = Stats.Net.SendRate.Get(); break; 
 				//case eTotalRate:		Value = ; break; 
+#ifdef WIN32
+				case eFirewallStatus:	Value = pWinSock->GetFirewallStatus(); break; 
+#endif
 			}
 
 			SSocketNode::SValue& ColValue = pNode->Values[section];
+
+#ifdef WIN32
+			// Note: all rate and transfer values are not available without ETW being enabled
+			if (!IsMonitoringETW && section >= eReceives && section < eFirewallStatus)
+				Value = tr("N/A");
+#endif
 
 			if (ColValue.Raw != Value)
 			{
@@ -127,17 +144,39 @@ void CSocketModel::Sync(QMultiMap<quint64, CSocketPtr> SocketList)
 
 				switch (section)
 				{
-					case eTimeStamp:			ColValue.Formated = QDateTime::fromTime_t(pSocket->GetCreateTimeStamp()/1000).toString("dd.MM.yyyy hh:mm:ss"); break;
+					case eProcess:			{
+												quint64 ProcessId = pSocket->GetProcessId();
+												if (ProcessId)
+													ColValue.Formated = tr("%1 (%2)").arg(pSocket->GetProcessName()).arg(ProcessId);
+												break;
+											}
+
+					case eProtocol:				ColValue.Formated = pSocket->GetProtocolString(); break; 
+					case eState:				ColValue.Formated = pSocket->GetStateString(); break; 			
+
+					case eTimeStamp:			ColValue.Formated = QDateTime::fromTime_t(Value.toULongLong()/1000).toString("dd.MM.yyyy hh:mm:ss"); break;
 
 					case eReceiveBytes:
 					case eSendBytes:
+												if(Value.type() != QVariant::String) ColValue.Formated = FormatSize(Value.toULongLong()); break; 
 					case eReceiveBytesDelta:
 					case eSendBytesDelta:
-												ColValue.Formated = FormatSize(Value.toULongLong()); break; 
+												if(Value.type() != QVariant::String) ColValue.Formated = FormatSizeEx(Value.toULongLong(), bClearZeros); break; 
 
 					case eReceiveRate:
 					case eSendRate:
-												ColValue.Formated = FormatSize(Value.toULongLong()) + "/s"; break; 
+												if(Value.type() != QVariant::String) ColValue.Formated = FormatRateEx(Value.toULongLong(), bClearZeros); break; 
+
+					case eReceives:
+					case eSends:
+												if(Value.type() != QVariant::String) ColValue.Formated = FormatNumber(Value.toULongLong()); break; 
+					case eReceivesDelta:
+					case eSendsDelta:
+												if(Value.type() != QVariant::String) ColValue.Formated = FormatNumberEx(Value.toULongLong(), bClearZeros); break; 
+#ifdef WIN32
+					case eFirewallStatus:		ColValue.Formated = pWinSock->GetFirewallStatusString(); break; 
+#endif
+												
 				}
 			}
 
@@ -187,17 +226,17 @@ QVariant CSocketModel::headerData(int section, Qt::Orientation orientation, int 
 			case eRemoteAddress:	return tr("Remote address");
 			case eRemotePort:		return tr("Remote port");
 #ifdef WIN32
-			case eOwner:			return tr("Owner");
+			case eOwnerService:		return tr("Owner");
 #endif
 			case eTimeStamp:		return tr("Time stamp");
 			//case eLocalHostname:	return tr("Local hostname");
-			//case eRemoteHostname:	return tr("Remote hostname");
+			case eRemoteHostname:	return tr("Remote hostname");
 			case eReceives:			return tr("Receives");
 			case eSends:			return tr("Sends");
 			case eReceiveBytes:		return tr("Receive bytes");
 			case eSendBytes:		return tr("Send bytes");
 			//case eTotalBytes:		return tr("Total bytes");
-			case eReceivesDetla:	return tr("Receives detla");
+			case eReceivesDelta:	return tr("Receives delta");
 			case eSendsDelta:		return tr("Sends delta");
 			case eReceiveBytesDelta:return tr("Receive bytes delta");
 			case eSendBytesDelta:	return tr("Send bytes delta");

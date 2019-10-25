@@ -4,16 +4,20 @@
 #include "../../Common/Common.h"
 #ifdef WIN32
 #include "../../API/Windows/WinService.h"	
-#include "../../API/Windows/ProcessHacker.h"	
+#include "../../API/Windows/ProcessHacker.h"
+#include "../../API/Windows/ProcessHacker/appsup.h"	
 #include "WinSvcWindow.h"
+#include "../../API/Windows/WinProcess.h"
 #endif
-#include "..\..\Common\SortFilterProxyModel.h"
-
+#include "../../Common/SortFilterProxyModel.h"
+#include "../../Common/Finder.h"
 
 CServicesView::CServicesView(bool bAll, QWidget *parent)
 	:CPanelView(parent)
 {
-	m_pMainLayout = new QHBoxLayout();
+	m_bAll = bAll;
+
+	m_pMainLayout = new QVBoxLayout();
 	m_pMainLayout->setMargin(0);
 	this->setLayout(m_pMainLayout);
 
@@ -27,7 +31,7 @@ CServicesView::CServicesView(bool bAll, QWidget *parent)
 
 	// Service List
 	m_pServiceList = new QTreeViewEx();
-	m_pServiceList->setItemDelegate(new CStyledGridItemDelegate(m_pServiceList->fontMetrics().height() + 3, this));
+	m_pServiceList->setItemDelegate(theGUI->GetItemDelegate());
 
 	m_pServiceList->setModel(m_pSortProxy);
 
@@ -37,11 +41,40 @@ CServicesView::CServicesView(bool bAll, QWidget *parent)
 	m_pServiceList->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_pServiceList, SIGNAL(customContextMenuRequested( const QPoint& )), this, SLOT(OnMenu(const QPoint &)));
 
+	connect(theGUI, SIGNAL(ReloadPanels()), m_pServiceModel, SLOT(Clear()));
+
+	m_pServiceList->setColumnReset(2);
+	connect(m_pServiceList, SIGNAL(ResetColumns()), this, SLOT(OnResetColumns()));
+	//connect(m_pServiceList, SIGNAL(ColumnChanged(int, bool)), this, SLOT(OnColumnsChanged()));
+
 	m_pMainLayout->addWidget(m_pServiceList);
 	// 
 
+	m_pMainLayout->addWidget(new CFinder(m_pSortProxy, this));
+
+	if (!bAll)
+	{
+		//m_pServiceList->SetColumnHidden(CServiceModel::ePID, true, true);
+#ifdef WIN32
+		m_pServiceList->SetColumnHidden(CServiceModel::eGroupe, true, true);
+#endif
+		m_pServiceList->SetColumnHidden(CServiceModel::eFileName, true, true);
+#ifdef WIN32
+		m_pServiceList->SetColumnHidden(CServiceModel::eDescription, true, true);
+		m_pServiceList->SetColumnHidden(CServiceModel::eCompanyName, true, true);
+		m_pServiceList->SetColumnHidden(CServiceModel::eVersion, true, true);
+#endif
+		//m_pServiceList->setColumnHidden(CServiceModel::eBinaryPath, true, true);
+	}
+
 	//connect(m_pServiceList, SIGNAL(clicked(const QModelIndex&)), this, SLOT(OnClicked(const QModelIndex&)));
 	connect(m_pServiceList, SIGNAL(doubleClicked(const QModelIndex&)), this, SLOT(OnDoubleClicked(const QModelIndex&)));
+
+	QByteArray Columns = theConf->GetBlob(objectName() + "/ServicesView_Columns");
+	if (Columns.isEmpty())
+		OnResetColumns();
+	else
+		m_pServiceList->restoreState(Columns);
 
 	//m_pMenu = new QMenu();
 	m_pMenuStart = m_pMenu->addAction(tr("Start"), this, SLOT(OnServiceAction()));
@@ -53,9 +86,21 @@ CServicesView::CServicesView(bool bAll, QWidget *parent)
 	m_pMenuDelete = m_pMenu->addAction(tr("Delete"), this, SLOT(OnServiceAction()));
 #ifdef WIN32
 	m_pMenuOpenKey = m_pMenu->addAction(tr("Open key"), this, SLOT(OnServiceAction()));
+	if (bAll)
+	{
+		m_pMenu->addSeparator();
+		m_pMenuKernelServices = m_pMenu->addAction(tr("Show Kernel Services"), this, SLOT(Refresh()));
+		m_pMenuKernelServices->setCheckable(true);
+		m_pMenuKernelServices->setChecked(theConf->GetValue(objectName() + "/ShowKernelServices", true).toBool());
+	}
+	else
+		m_pMenuKernelServices = NULL;
 #endif
 
 	AddPanelItemsToMenu();
+
+	// must be after m_pMenuKernelServices
+	connect(m_pServiceList, SIGNAL(ColumnChanged(int, bool)), this, SLOT(OnColumnsChanged()));
 
 	if(bAll)
 		connect(theAPI, SIGNAL(ServiceListUpdated(QSet<QString>, QSet<QString>, QSet<QString>)), this, SLOT(OnServiceListUpdated(QSet<QString>, QSet<QString>, QSet<QString>)));
@@ -63,50 +108,87 @@ CServicesView::CServicesView(bool bAll, QWidget *parent)
 
 CServicesView::~CServicesView()
 {
+	theConf->SetBlob(objectName() + "/ServicesView_Columns", m_pServiceList->saveState());
+	if (m_pMenuKernelServices)
+		theConf->SetValue(objectName() + "/ShowKernelServices", m_pMenuKernelServices->isChecked());
 }
 
-#ifdef WIN32
-void CServicesView::SetShowKernelServices(bool bShow)
+void CServicesView::OnResetColumns()
 {
-	m_pServiceModel->SetShowKernelServices(bShow);
-}
+	for (int i = 0; i < m_pServiceModel->columnCount(); i++)
+		m_pServiceList->SetColumnHidden(i, true);
+
+	m_pServiceList->SetColumnHidden(CServiceModel::eService, false);
+#ifdef WIN32
+	m_pServiceList->SetColumnHidden(CServiceModel::eDisplayName, false);
+	m_pServiceList->SetColumnHidden(CServiceModel::eType, false);
 #endif
+	m_pServiceList->SetColumnHidden(CServiceModel::eStatus, false);
+#ifdef WIN32
+	m_pServiceList->SetColumnHidden(CServiceModel::eStartType, false);
+#endif
+	if (m_bAll) {
+		m_pServiceList->SetColumnHidden(CServiceModel::ePID, false);
+		m_pServiceList->SetColumnHidden(CServiceModel::eBinaryPath, false);
+	}
+}
+
+void CServicesView::OnColumnsChanged()
+{
+	Refresh();
+}
 
 void CServicesView::OnServiceListUpdated(QSet<QString> Added, QSet<QString> Changed, QSet<QString> Removed)
 {
-	QMap<QString, CServicePtr> ServiceList = theAPI->GetServiceList();
-
-	m_pServiceModel->Sync(ServiceList);
+	m_ServiceList = theAPI->GetServiceList();
 }
 
-void CServicesView::ShowServices(const CProcessPtr& pProcess)
+void CServicesView::Refresh()
 {
 #ifdef WIN32
+	if (m_pMenuKernelServices)
+		m_pServiceModel->SetShowKernelServices(m_pMenuKernelServices->isChecked());
+	else
+		m_pServiceModel->SetShowKernelServices(false);
+#endif
+
+	m_pServiceModel->Sync(m_ServiceList);
+}
+
+void CServicesView::ShowProcesses(const QList<CProcessPtr>& Processes)
+{
+#ifdef WIN32
+	m_ServiceList.clear();
+
 	QMap<QString, CServicePtr> AllServices = theAPI->GetServiceList();
-	QMap<QString, CServicePtr> Services;
-	foreach(const QString& ServiceName, pProcess.objectCast<CWinProcess>()->GetServiceList())
+	foreach(const CProcessPtr& pProcess, Processes)
 	{
-		CServicePtr pService = AllServices[ServiceName.toLower()];
-		if (!pService)
-			pService = CServicePtr(new CWinService(ServiceName));
-		Services.insert(ServiceName.toLower(), pService);
+		foreach(const QString& ServiceName, pProcess.staticCast<CWinProcess>()->GetServiceList())
+		{
+			CServicePtr pService = AllServices[ServiceName.toLower()];
+			if (!pService)
+				pService = CServicePtr(new CWinService(ServiceName));
+			m_ServiceList.insert(ServiceName.toLower(), pService);
+		}
 	}
 
-	m_pServiceModel->Sync(Services);
+	m_pServiceModel->Sync(m_ServiceList);
 #endif
 }
 
 void CServicesView::OnMenu(const QPoint &point)
 {
+	QModelIndexList selectedRows = m_pServiceList->selectedRows();
+
 	int CanStart = 0;
 	int CanStop = 0;
 	int CanPause = 0;
 	int CanContinue = 0;
-	foreach(const QModelIndex& Index, m_pServiceList->selectedRows())
+	foreach(const QModelIndex& Index, selectedRows)
 	{
 		QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 #ifdef WIN32
-		QSharedPointer<CWinService> pService = m_pServiceModel->GetService(ModelIndex).objectCast<CWinService>();
+		QSharedPointer<CWinService> pService = m_pServiceModel->GetService(ModelIndex).staticCast<CWinService>();
 		if (pService.isNull())
 			continue;
 
@@ -141,9 +223,9 @@ void CServicesView::OnMenu(const QPoint &point)
 	m_pMenuPause->setEnabled(CanPause > 0);
 	m_pMenuStop->setEnabled(CanStop > 0);
 
-	m_pMenuDelete->setEnabled(m_pServiceList->selectedRows().count() >= 1);
+	m_pMenuDelete->setEnabled(selectedRows.count() >= 1);
 #ifdef WIN32
-	m_pMenuOpenKey->setEnabled(m_pServiceList->selectedRows().count() == 1);
+	m_pMenuOpenKey->setEnabled(selectedRows.count() == 1);
 #endif
 
 	CPanelView::OnMenu(point);
@@ -214,9 +296,10 @@ void CServicesView::OnDoubleClicked(const QModelIndex& Index)
 {
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 #ifdef WIN32
-	QSharedPointer<CWinService> pService = m_pServiceModel->GetService(ModelIndex).objectCast<CWinService>();
+	QSharedPointer<CWinService> pService = m_pServiceModel->GetService(ModelIndex).staticCast<CWinService>();
 
 	CWinSvcWindow* pWnd = new CWinSvcWindow(pService);
+	connect(pWnd, SIGNAL(ServicesChanged()), theGUI, SLOT(OnReloadService()));
 	pWnd->show();
 #endif
 }

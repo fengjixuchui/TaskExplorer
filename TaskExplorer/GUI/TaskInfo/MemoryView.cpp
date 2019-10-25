@@ -6,6 +6,8 @@
 #include "../../API/Windows/WinMemory.h"
 #endif
 #include "../MemoryEditor.h"
+#include "../../Common/Finder.h"
+#include "../Search/MemorySearch.h"
 
 CMemoryView::CMemoryView(QWidget *parent)
 	:CPanelView(parent)
@@ -25,14 +27,18 @@ CMemoryView::CMemoryView(QWidget *parent)
 	m_pFilterLayout->addWidget(m_pHideFree);
 
 	m_pRefresh = new QPushButton(tr("Refresh"));
+	connect(m_pRefresh, SIGNAL(pressed()), this, SLOT(OnRefresh()));
 	m_pFilterLayout->addWidget(m_pRefresh);
+
+	m_pSearch = new QPushButton(tr("Search"));
+	connect(m_pSearch, SIGNAL(pressed()), this, SLOT(OnSearch()));
+	m_pFilterLayout->addWidget(m_pSearch);
 
 	m_pFilterLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum));
 
 	m_pHideFree->setChecked(theConf->GetBool("MemoryView/HideFree", true));
-
 	connect(m_pHideFree, SIGNAL(stateChanged(int)), this, SLOT(UpdateFilter()));
-	connect(m_pRefresh, SIGNAL(toggled(bool)), this, SLOT(Refresh()));
+	
 
 
 	m_pMemoryModel = new CMemoryModel();
@@ -45,7 +51,7 @@ CMemoryView::CMemoryView(QWidget *parent)
 
 	// Memory List
 	m_pMemoryList = new QTreeViewEx();
-	m_pMemoryList->setItemDelegate(new CStyledGridItemDelegate(m_pMemoryList->fontMetrics().height() + 3, this));
+	m_pMemoryList->setItemDelegate(theGUI->GetItemDelegate());
 
 	m_pMemoryList->setModel(m_pSortProxy);
 
@@ -55,17 +61,25 @@ CMemoryView::CMemoryView(QWidget *parent)
 	m_pMemoryList->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_pMemoryList, SIGNAL(customContextMenuRequested( const QPoint& )), this, SLOT(OnMenu(const QPoint &)));
 
-	connect(m_pMemoryList, SIGNAL(doubleClicked(const QModelIndex&)), this, SLOT(OnDoubleClicked(const QModelIndex&)));
+	connect(m_pMemoryList, SIGNAL(doubleClicked(const QModelIndex&)), this, SLOT(OnDoubleClicked()));
+
+	connect(theGUI, SIGNAL(ReloadPanels()), m_pMemoryModel, SLOT(Clear()));
+
+	m_pMemoryList->setColumnReset(2);
+	connect(m_pMemoryList, SIGNAL(ResetColumns()), this, SLOT(OnResetColumns()));
+	connect(m_pMemoryList, SIGNAL(ColumnChanged(int, bool)), this, SLOT(OnColumnsChanged()));
 
 	m_pMainLayout->addWidget(m_pMemoryList);
 	// 
 
-	UpdateFilter();
+	m_pMainLayout->addWidget(new CFinder(m_pSortProxy, this));
 
-	connect(theAPI, SIGNAL(MemoryListUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)), this, SLOT(OnMemoryListUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
+	UpdateFilter();
 
 	//m_pMenu = new QMenu();
 
+	m_pMenuEdit = m_pMenu->addAction(tr("Edit memory"), this, SLOT(OnDoubleClicked()));
+	m_pMenu->addSeparator();
 	m_pMenuSave = m_pMenu->addAction(tr("Dump memory"), this, SLOT(OnSaveMemory()));
 	m_pMenuProtect = m_pMenu->addAction(tr("Change protection"), this, SLOT(OnProtectMemory()));
 	m_pMenuFree = m_pMenu->addAction(tr("Free"), this, SLOT(OnFreeMemory()));
@@ -74,32 +88,70 @@ CMemoryView::CMemoryView(QWidget *parent)
 	AddPanelItemsToMenu();
 
 	setObjectName(parent->objectName());
-	m_pMemoryList->header()->restoreState(theConf->GetBlob(objectName() + "/MemorysView_Columns"));
+	QByteArray Columns = theConf->GetBlob(objectName() + "/MemorysView_Columns");
+	if (Columns.isEmpty())
+		OnResetColumns();
+	else
+		m_pMemoryList->restoreState(Columns);
 }
 
 
 CMemoryView::~CMemoryView()
 {
-	theConf->SetBlob(objectName() + "/MemorysView_Columns", m_pMemoryList->header()->saveState());
+	theConf->SetBlob(objectName() + "/MemorysView_Columns", m_pMemoryList->saveState());
 }
 
-void CMemoryView::ShowProcess(const CProcessPtr& pProcess)
+void CMemoryView::OnResetColumns()
 {
+	for (int i = 0; i < m_pMemoryModel->columnCount(); i++)
+		m_pMemoryList->SetColumnHidden(i, true);
+
+	m_pMemoryList->SetColumnHidden(CMemoryModel::eBaseAddress, false);
+	m_pMemoryList->SetColumnHidden(CMemoryModel::eType, false);
+	m_pMemoryList->SetColumnHidden(CMemoryModel::eSize, false);
+	m_pMemoryList->SetColumnHidden(CMemoryModel::eProtection, false);
+	m_pMemoryList->SetColumnHidden(CMemoryModel::eUse, false);
+}
+
+void CMemoryView::OnColumnsChanged()
+{
+	m_pMemoryModel->Sync(m_MemoryList);
+}
+
+void CMemoryView::ShowProcesses(const QList<CProcessPtr>& Processes)
+{
+	CProcessPtr pProcess;
+	if (Processes.count() > 1)
+	{
+		setEnabled(false);
+	}
+	else if(!Processes.isEmpty())
+	{
+		setEnabled(true);
+		pProcess = Processes.first();
+	}
+
 	m_pCurProcess = pProcess;
 
-	Refresh();
+	OnRefresh();
 
 	m_pMemoryList->expandAll();
 }
 
-void CMemoryView::Refresh()
+void CMemoryView::OnRefresh()
 {
 	if (!m_pCurProcess)
 		return;
 
-	QMultiMap<quint64, CMemoryPtr> MemoryList = m_pCurProcess->GetMemoryMap();
+	m_MemoryList = m_pCurProcess->GetMemoryMap();
 
-	m_pMemoryModel->Sync(MemoryList);
+	m_pMemoryModel->Sync(m_MemoryList);
+}
+
+void CMemoryView::OnSearch()
+{
+	CMemorySearch* pMemorySearch = new CMemorySearch(m_pCurProcess);
+	pMemorySearch->show();
 }
 
 void CMemoryView::OnMenu(const QPoint &point)
@@ -108,19 +160,19 @@ void CMemoryView::OnMenu(const QPoint &point)
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 	CMemoryPtr pMemory = m_pMemoryModel->GetMemory(ModelIndex);
 
-	int count = m_pMemoryList->selectedRows().count();
+	QModelIndexList selectedRows = m_pMemoryList->selectedRows();
 
-    if (count == 0 || (count == 1 && !pMemory->IsAllocationBase()))
+    if (selectedRows.count() == 0 || (selectedRows.count() == 1 && !pMemory->IsAllocationBase()))
     {
-		m_pMenuSave->setEnabled(count == 1);
-		m_pMenuProtect->setEnabled(count == 1 && !pMemory->IsFree());
-		m_pMenuFree->setEnabled(count == 1 && !pMemory->IsFree());
-		m_pMenuDecommit->setEnabled(count == 1 && !pMemory->IsFree() && !pMemory->IsMapped());
+		m_pMenuSave->setEnabled(selectedRows.count() == 1);
+		m_pMenuProtect->setEnabled(selectedRows.count() == 1 && !pMemory->IsFree());
+		m_pMenuFree->setEnabled(selectedRows.count() == 1 && !pMemory->IsFree());
+		m_pMenuDecommit->setEnabled(selectedRows.count() == 1 && !pMemory->IsFree() && !pMemory->IsMapped());
     }
     else
     {
 		ulong numberOfAllocationBase = 0;
-		foreach(const QModelIndex& Index, m_pMemoryList->selectedRows())
+		foreach(const QModelIndex& Index, selectedRows)
 		{
 			QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 			CMemoryPtr pMemory = m_pMemoryModel->GetMemory(ModelIndex);
@@ -129,7 +181,7 @@ void CMemoryView::OnMenu(const QPoint &point)
                 numberOfAllocationBase++;
         }
 
-        m_pMenuSave->setEnabled(numberOfAllocationBase == 0 || numberOfAllocationBase == count);
+        m_pMenuSave->setEnabled(numberOfAllocationBase == 0 || numberOfAllocationBase == selectedRows.count());
 		m_pMenuProtect->setEnabled(false);
 		m_pMenuFree->setEnabled(false);
 		m_pMenuDecommit->setEnabled(false);
@@ -138,8 +190,9 @@ void CMemoryView::OnMenu(const QPoint &point)
 	CPanelView::OnMenu(point);
 }
 
-void CMemoryView::OnDoubleClicked(const QModelIndex& Index)
+void CMemoryView::OnDoubleClicked()
 {
+	QModelIndex Index = m_pMemoryList->currentIndex();
 	QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
 	CMemoryPtr pMemory = m_pMemoryModel->GetMemory(ModelIndex);
 	if (!pMemory)
@@ -152,7 +205,7 @@ void CMemoryView::OnDoubleClicked(const QModelIndex& Index)
 	}
 
 	CMemoryEditor* pEditor = new CMemoryEditor();
-	pEditor->setWindowTitle(tr("Memory Editor: %1 (%2) 0x%3").arg(m_pCurProcess->GetName()).arg(m_pCurProcess->GetParentId()).arg(pMemory->GetBaseAddress(),0,16));
+	pEditor->setWindowTitle(tr("Memory Editor: %1 (%2) 0x%3").arg(m_pCurProcess->GetName()).arg(m_pCurProcess->GetProcessId()).arg(pMemory->GetBaseAddress(),0,16));
 	pEditor->setDevice(pDevice, pMemory->GetBaseAddress());
 	pEditor->show();
 }
@@ -160,14 +213,11 @@ void CMemoryView::OnDoubleClicked(const QModelIndex& Index)
 void CMemoryView::OnSaveMemory()
 {
 	QFile DumpFile;
-	if (sender() == m_pMenuSave)
-	{
-		QString DumpPath = QFileDialog::getSaveFileName(this, tr("Dump memory"), "", tr("Dump files (*.dmp);;All files (*.*)"));
-		if (DumpPath.isEmpty())
-			return;
-		DumpFile.setFileName(DumpPath);
-		DumpFile.open(QFile::WriteOnly);
-	}
+	QString DumpPath = QFileDialog::getSaveFileName(this, tr("Dump memory"), "", tr("Dump files (*.dmp);;All files (*.*)"));
+	if (DumpPath.isEmpty())
+		return;
+	DumpFile.setFileName(DumpPath);
+	DumpFile.open(QFile::WriteOnly);
 
 	QList<STATUS> Errors;
 	int Force = -1;

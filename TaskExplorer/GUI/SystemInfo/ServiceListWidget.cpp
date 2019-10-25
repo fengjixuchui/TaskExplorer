@@ -6,23 +6,22 @@
 #endif
 
 
-CServiceListWidget::CServiceListWidget(QWidget *parent)
+CServiceListWidget::CServiceListWidget(bool bEditable, QWidget *parent)
 	:QWidget(parent)
 {
-    m_pMainWidget = new QWidget(this);
-    m_pMainWidget->setGeometry(QRect(10, 10, 461, 311));
-    m_pMainLayout = new QGridLayout(m_pMainWidget);
+    m_pMainLayout = new QGridLayout();
+	this->setLayout(m_pMainLayout);
     m_pMainLayout->setContentsMargins(0, 0, 0, 0);
 
-	m_pInfoLabel = new QLabel(m_pMainWidget);
+	m_pInfoLabel = new QLabel();
     m_pMainLayout->addWidget(m_pInfoLabel, 0, 0, 1, 1);
 
-	m_pServiceList = new QTreeWidget(m_pMainWidget);
+	m_pServiceList = new QTreeWidget();
 	m_pServiceList->setHeaderLabels(tr("Name|Display name|File name").split("|"));
     m_pMainLayout->addWidget(m_pServiceList, 1, 0, 1, 1);
 	connect(m_pServiceList, SIGNAL(currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)), this, SLOT(OnItemSellected(QTreeWidgetItem*)));
 
-    m_pDescription = new QLabel(m_pMainWidget);
+    m_pDescription = new QLabel();
     QSizePolicy sizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     sizePolicy.setHorizontalStretch(0);
     sizePolicy.setVerticalStretch(0);
@@ -35,12 +34,25 @@ CServiceListWidget::CServiceListWidget(QWidget *parent)
     QHBoxLayout* horizontalLayout = new QHBoxLayout();
     horizontalLayout->addItem(new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum));
 
-    m_pStartBtn = new QPushButton(m_pMainWidget);
+	if (bEditable)
+	{
+		m_pAddBtn = new QPushButton();
+		m_pAddBtn->setText(tr("Add ..."));
+		horizontalLayout->addWidget(m_pAddBtn);
+		connect(m_pAddBtn, SIGNAL(pressed()), this, SLOT(OnAdd()));
+
+		m_pRemoveBtn = new QPushButton();
+		m_pRemoveBtn->setText(tr("Remove"));
+		horizontalLayout->addWidget(m_pRemoveBtn);
+		connect(m_pRemoveBtn, SIGNAL(pressed()), this, SLOT(OnRemove()));
+	}
+
+    m_pStartBtn = new QPushButton();
 	m_pStartBtn->setText(tr("Start"));
     horizontalLayout->addWidget(m_pStartBtn);
 	connect(m_pStartBtn, SIGNAL(pressed()), this, SLOT(OnStart()));
 
-    m_pPauseBtn = new QPushButton(m_pMainWidget);
+    m_pPauseBtn = new QPushButton();
 	m_pPauseBtn->setText(tr("Pause"));
     horizontalLayout->addWidget(m_pPauseBtn);
 	connect(m_pPauseBtn, SIGNAL(pressed()), this, SLOT(OnPause()));
@@ -57,12 +69,17 @@ void CServiceListWidget::SetServices(const QMap<QString, CServicePtr>& Services)
 {
 	m_Services = Services;
 
+	UpdateServices();
+}
+
+void CServiceListWidget::UpdateServices()
+{
 	QMap<QString, QTreeWidgetItem*> OldServices;
 	for(int i = 0; i < m_pServiceList->topLevelItemCount(); ++i) 
 	{
 		QTreeWidgetItem* pItem = m_pServiceList->topLevelItem(i);
-		QString TypeName = pItem->data(eName, Qt::UserRole).toString();
-		OldServices.insert(TypeName ,pItem);
+		QString Name = pItem->data(eName, Qt::UserRole).toString();
+		OldServices.insert(Name ,pItem);
 	}
 
 	foreach(const CServicePtr& pService, m_Services)
@@ -84,13 +101,13 @@ void CServiceListWidget::SetServices(const QMap<QString, CServicePtr>& Services)
 		delete pItem;
 }
 
-void CServiceListWidget::SetServices(const QStringList& ServiceNames)
+void CServiceListWidget::SetServicesList(const QStringList& ServiceNames)
 {
 	QMap<QString, CServicePtr> AllServices = theAPI->GetServiceList();
 	QMap<QString, CServicePtr> Services;
 	foreach(const QString& ServiceName, ServiceNames)
 	{
-		CServicePtr pService = AllServices[ServiceName.toLower()];
+		CServicePtr pService = AllServices.value(ServiceName.toLower());
 #ifdef WIN32
 		if (!pService)
 			pService = CServicePtr(new CWinService(ServiceName));
@@ -98,6 +115,22 @@ void CServiceListWidget::SetServices(const QStringList& ServiceNames)
 		Services.insert(ServiceName.toLower(), pService);
 	}
 	SetServices(Services);
+}
+
+QStringList CServiceListWidget::GetServicesList() const
+{
+	QStringList ServiceNames;
+	/*for(int i = 0; i < m_pServiceList->topLevelItemCount(); ++i) 
+	{
+		QTreeWidgetItem* pItem = m_pServiceList->topLevelItem(i);
+		QString Name = pItem->data(eName, Qt::UserRole).toString();
+		CServicePtr pService = m_Services.value(Name);
+		if(pService)
+			ServiceNames.append(pService->GetName());
+	}*/
+	foreach(const CServicePtr& pService, m_Services)
+		ServiceNames.append(pService->GetName());
+	return ServiceNames;
 }
 
 void CServiceListWidget::OnItemSellected(QTreeWidgetItem* item)
@@ -124,7 +157,7 @@ void CServiceListWidget::OnItemSellected(QTreeWidgetItem* item)
 	}
 
 #ifdef WIN32
-	m_pDescription->setText(pService.objectCast<CWinService>()->GetDescription());
+	m_pDescription->setText(pService.staticCast<CWinService>()->GetDescription());
 #endif
 }
 
@@ -158,4 +191,43 @@ void CServiceListWidget::OnPause()
 		pService->Continue();
 	else
 		pService->Pause();
+}
+
+void CServiceListWidget::OnAdd()
+{
+	QString Value = QInputDialog::getText(this, "TaskExplorer", tr("Enter Service name"), QLineEdit::Normal);
+	if (Value.isEmpty())
+		return;
+
+	if (m_Services.contains(Value.toLower()))
+	{
+		QMessageBox::warning(this, "TaskExplorer", tr("This service is already added."));
+		return;
+	}
+
+	QMap<QString, CServicePtr> AllServices = theAPI->GetServiceList();
+
+	CServicePtr pService = AllServices.value(Value.toLower());
+	if (!pService)
+	{
+		QMessageBox::about(this, "TaskExplorer", tr("This service does not exist."));
+		return;
+	}
+
+	m_Services.insert(Value.toLower(), pService);
+	UpdateServices();
+}
+
+void CServiceListWidget::OnRemove()
+{
+	QTreeWidgetItem* item = m_pServiceList->currentItem();
+	if (!item)
+		return;
+	QString Name = item->data(eName, Qt::UserRole).toString();
+
+	if(QMessageBox("TaskExplorer", tr("Do you want to delete the sellected service"), QMessageBox::Question, QMessageBox::Yes, QMessageBox::No | QMessageBox::Default | QMessageBox::Escape, QMessageBox::NoButton).exec() != QMessageBox::Yes)
+		return;
+
+	m_Services.remove(Name);
+	UpdateServices();
 }

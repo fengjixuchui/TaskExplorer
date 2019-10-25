@@ -20,6 +20,9 @@ public:
 	virtual ~CSplitTreeView();
 
 	QTreeView*			GetView() { return m_pList; }
+	QTreeView*			GetTree() { return m_pTree; }
+
+	bool				IsTree() const { return m_bTreeEnabled; }
 
 	void				SetTreeWidth(int Width);
 	int					GetTreeWidth() const;
@@ -64,7 +67,7 @@ signals:
 	void				clicked(const QModelIndex& Index);
 	void				doubleClicked(const QModelIndex& Index);
 	void				currentChanged(const QModelIndex &current, const QModelIndex &previous);
-	// todo add more relevant signals
+	void				selectionChanged(const QItemSelection& selected, const QItemSelection& seselected);
 
 public slots:
 	void				hideColumn(int column) { m_pList->hideColumn(column); }
@@ -106,5 +109,5 @@ private:
 	QAbstractItemModel*		m_pModel;
 	COneColumnModel*		m_pOneModel;
 
-	bool					m_LockSellection;
+	int						m_LockSellection;
 };

@@ -1,14 +1,27 @@
 #include "stdafx.h"
 #include "SystemAPI.h"
-#include "Windows\WindowsAPI.h"
+#ifdef WIN32
+#include "Windows/WindowsAPI.h"
+#else
+#include "Linux/LinuxAPI.h"
+#endif
 
-#define CORE_THREAD
+CSystemAPI*	theAPI = NULL;
 
-CSystemAPI::CSystemAPI(QObject *parent): QObject(parent)
+int _QHostAddress_type = qRegisterMetaType<QHostAddress>("QHostAddress");
+
+int _QSet_qquint64ype = qRegisterMetaType<QSet<quint64>>("QSet<quint64>");
+int _QSet_QString_type = qRegisterMetaType<QSet<QString>>("QSet<QString>");
+
+// When running this in a separate thread, QObject parent must be NULL
+CSystemAPI::CSystemAPI(QObject *parent) 
 {
+	m_PackageCount = 0;
 	m_NumaCount = 0;
 	m_CoreCount = 0;
 	m_CpuCount = 0;
+	m_CpuBaseClock = 0;
+	m_CpuCurrentClock = 0;
 
 	m_CpuStatsDPCUsage = 0;
 
@@ -19,44 +32,47 @@ CSystemAPI::CSystemAPI(QObject *parent): QObject(parent)
 	m_MemoryLimit = 0;
 	m_SwapedOutMemory = 0;
 	m_TotalSwapMemory = 0;
-	m_PagedMemory = 0;
-	m_PersistentPagedMemory = 0;
-	m_NonPagedMemory = 0;
+	m_PagedPool = 0;
+	m_PersistentPagedPool = 0;
+	m_NonPagedPool = 0;
 	m_PhysicalUsed = 0;
 	m_CacheMemory = 0;
+	m_KernelMemory = 0;
+	m_DriverMemory = 0;
 	m_ReservedMemory = 0;
 
 	m_TotalProcesses = 0;
 	m_TotalThreads = 0;
 	m_TotalHandles = 0;
 
+	m_HardwareChangePending = false;
+
 	m_FileListUpdateWatcher = NULL;
 
-#ifdef CORE_THREAD
-	ASSERT(parent == NULL); // When running this in a separate thread, parent must be NULL!!!
 	QThread *pThread = new QThread();
 	this->moveToThread(pThread);
 	pThread->start();
-#endif
-
-	QTimer::singleShot(0, this, SLOT(Init()));
 }
 
 
 CSystemAPI::~CSystemAPI()
 {
-#ifdef CORE_THREAD
 	this->thread()->quit();
-#endif
+
+	/*if (m_FileListUpdateWatcher) 
+		m_FileListUpdateWatcher->isRunning();*/
+
+	theAPI = NULL;
 }
 
-CSystemAPI* CSystemAPI::New()
+void CSystemAPI::InitAPI()
 {
 #ifdef WIN32
-	return new CWindowsAPI();
+	theAPI = new CWindowsAPI();
 #else
-	// todo: implement other systems liek Linux
+    theAPI = new CLinuxAPI();
 #endif
+	QMetaObject::invokeMethod(theAPI, "Init", Qt::BlockingQueuedConnection);
 }
 
 /*void CSystemAPI::UpdateStats()
@@ -71,7 +87,7 @@ QMap<quint64, CProcessPtr> CSystemAPI::GetProcessList()
 	return m_ProcessList;
 }
 
-CProcessPtr CSystemAPI::GetProcessByID(quint64 ProcessId)
+CProcessPtr CSystemAPI::GetProcessByID(quint64 ProcessId, bool bAddIfNew)
 {
 	QReadLocker Locker(&m_ProcessMutex);
 	return m_ProcessList.value(ProcessId);
@@ -95,6 +111,11 @@ QMap<QString, CServicePtr> CSystemAPI::GetServiceList()
 	return m_ServiceList;
 }
 
+CServicePtr CSystemAPI::GetService(const QString& Name)
+{
+	QReadLocker Locker(&m_ServiceMutex);
+	return m_ServiceList.value(Name.toLower());
+}
 
 QMap<QString, CDriverPtr> CSystemAPI::GetDriverList()
 {
@@ -148,4 +169,13 @@ void CSystemAPI::OnOpenFilesUpdated()
 {
 	m_FileListUpdateWatcher->deleteLater();
 	m_FileListUpdateWatcher = NULL;
+}
+
+void CSystemAPI::NotifyHardwareChanged()
+{
+	if(!m_HardwareChangePending)
+	{
+		m_HardwareChangePending = true;
+		QTimer::singleShot(100,this,SLOT(OnHardwareChanged())); // OnHardwareChanged must first do m_HardwareChangePending = false;
+	}
 }

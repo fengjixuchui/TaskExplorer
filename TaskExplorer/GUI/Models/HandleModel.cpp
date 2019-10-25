@@ -9,6 +9,7 @@
 CHandleModel::CHandleModel(QObject *parent)
 :CListItemModel(parent)
 {
+	m_SizePosNA = false;
 }
 
 CHandleModel::~CHandleModel()
@@ -18,14 +19,17 @@ CHandleModel::~CHandleModel()
 void CHandleModel::Sync(QMap<quint64, CHandlePtr> HandleList)
 {
 	QList<SListNode*> New;
-	QMap<QVariant, SListNode*> Old = m_Map;
+	QHash<QVariant, SListNode*> Old = m_Map;
+	
+	bool bClearZeros = theConf->GetBool("Options/ClearZeros", true);
 
 	foreach (const CHandlePtr& pHandle, HandleList)
 	{
 		QVariant ID = (quint64)pHandle.data();
 
 		int Row = -1;
-		SHandleNode* pNode = static_cast<SHandleNode*>(Old[ID]);
+		QHash<QVariant, SListNode*>::iterator I = Old.find(ID);
+		SHandleNode* pNode = I != Old.end() ? static_cast<SHandleNode*>(I.value()) : NULL;
 		if(!pNode)
 		{
 			pNode = static_cast<SHandleNode*>(MkNode(ID));
@@ -35,8 +39,8 @@ void CHandleModel::Sync(QMap<quint64, CHandlePtr> HandleList)
 		}
 		else
 		{
-			Old[ID] = NULL;
-			Row = m_List.indexOf(pNode);
+			I.value() = NULL;
+			Row = GetRow(pNode);
 		}
 
 #ifdef WIN32
@@ -47,14 +51,15 @@ void CHandleModel::Sync(QMap<quint64, CHandlePtr> HandleList)
 		bool State = false;
 		int Changed = 0;
 
-		// Note: icons are loaded asynchroniusly
-		if (!pNode->Icon.isValid())
-		{
-			CProcessPtr pProcess = pNode->pHandle->GetProcess().objectCast<CProcessInfo>();
+		CProcessPtr pProcess = pNode->pHandle->GetProcess().staticCast<CProcessInfo>();
 
-			if (!pProcess.isNull())
+		// Note: icons are loaded asynchroniusly
+		if (m_bUseIcons && !pNode->Icon.isValid() && m_Columns.contains(eProcess))
+		{
+			CModulePtr pModule = pProcess ? pProcess->GetModuleInfo() : CModulePtr();
+			if (pModule)
 			{
-				QPixmap Icon = pProcess->GetModuleInfo()->GetFileIcon();
+				QPixmap Icon = pModule->GetFileIcon();
 				if (!Icon.isNull()) {
 					Changed = 1; // set change for first column
 					pNode->Icon = Icon;
@@ -72,31 +77,37 @@ void CHandleModel::Sync(QMap<quint64, CHandlePtr> HandleList)
 
 		if (pNode->iColor != RowColor) {
 			pNode->iColor = RowColor;
-			pNode->Color = CTaskExplorer::GetColor(RowColor);
+			pNode->Color = CTaskExplorer::GetListColor(RowColor);
 			Changed = 2;
 		}
 
-		for(int section = eProcess; section < columnCount(); section++)
+		for(int section = 0; section < columnCount(); section++)
 		{
+			if (!m_Columns.contains(section))
+				continue; // ignore columns which are hidden
+
 			QVariant Value;
 			switch(section)
 			{
-				case eProcess:			Value = pHandle->GetProcessName(); break;	
+				case eProcess:			Value = pHandle->GetProcessId(); break;	
 				case eHandle:			Value = pHandle->GetHandleId(); break;
 				case eType:				Value = pHandle->GetTypeName(); break;
 				case eName:				Value = pHandle->GetFileName(); break;
 				case ePosition:			Value = pHandle->GetPosition(); break;	
 				case eSize:				Value = pHandle->GetSize(); break;	
-				case eGrantedAccess:	Value = pHandle->GetGrantedAccessString(); break;
+				case eGrantedAccess:	Value = (quint32)pHandle->GetGrantedAccess(); break;
 #ifdef WIN32
-				case eFileShareAccess:	Value = pWinHandle->GetFileShareAccessString(); break;	
-				case eAttributes:		Value = pWinHandle->GetAttributesString(); break;	
+				case eFileShareAccess:	Value = (quint32)pWinHandle->GetFileFlags(); break;	
+				case eAttributes:		Value = (quint32)pWinHandle->GetAttributes(); break;	
 				case eObjectAddress:	Value = pWinHandle->GetObjectAddress(); break;	
 				case eOriginalName:		Value = pWinHandle->GetOriginalName(); break;	
 #endif
 			}
 
 			SHandleNode::SValue& ColValue = pNode->Values[section];
+
+			if (m_SizePosNA && (section == ePosition || section == eSize))
+				Value = tr("N/A");
 
 			if (ColValue.Raw != Value)
 			{
@@ -106,11 +117,17 @@ void CHandleModel::Sync(QMap<quint64, CHandlePtr> HandleList)
 
 				switch (section)
 				{
-					//case eHandle:			ColValue.Formated = "0x" + QString::number(pHandle->GetHandleId(), 16); break;
+					case eProcess:			ColValue.Formated = tr("%1 (%2)").arg(pProcess.isNull() ? tr("Unknown process") : pProcess->GetName()).arg(pHandle->GetProcessId()); break;	
+					case eHandle:			ColValue.Formated = "0x" + QString::number(pHandle->GetHandleId(), 16); break;
 					case eType:				ColValue.Formated = pHandle->GetTypeString(); break;
+					case eGrantedAccess:	ColValue.Formated = pHandle->GetGrantedAccessString(); break;
 #ifdef WIN32
-					case eObjectAddress:	ColValue.Formated = "0x" + QString::number(pWinHandle->GetObjectAddress(), 16); break;	
+					case eAttributes:		ColValue.Formated = pWinHandle->GetAttributesString(); break;	
+					case eFileShareAccess:	ColValue.Formated = pWinHandle->GetFileShareAccessString(); break;	
+					case eObjectAddress:	ColValue.Formated = FormatAddress(pWinHandle->GetObjectAddress()); break;	
 #endif
+					case eSize:
+					case ePosition:			if(Value.type() != QVariant::String) ColValue.Formated = FormatNumberEx(Value.toULongLong(), bClearZeros);
 				}
 			}
 

@@ -1,8 +1,7 @@
 #pragma once
-#include <qwidget.h>
+#include "TreeViewEx.h"
 
-
-class CTreeItemModel : public QAbstractItemModel
+class CTreeItemModel : public QAbstractItemModelEx
 {
     Q_OBJECT
 
@@ -14,10 +13,8 @@ public:
 	bool			IsTree() const					{ return m_bTree; }
 	void			SetUseIcons(bool bUseIcons)		{ m_bUseIcons = bUseIcons; }
 
-	void			Sync(const QMap<QVariant, QVariantMap>& List);
-	void			CountItems();
+	//void			CountItems();
 	QModelIndex		FindIndex(const QVariant& ID);
-	void			Clear();
 	void			RemoveIndex(const QModelIndex &index);
 
 	QVariant		Data(const QModelIndex &index, int role, int section) const;
@@ -29,11 +26,15 @@ public:
     virtual QModelIndex		index(int row, int column, const QModelIndex &parent = QModelIndex()) const;
     virtual QModelIndex		parent(const QModelIndex &index) const;
     virtual int				rowCount(const QModelIndex &parent = QModelIndex()) const;
-	virtual int				columnCount(const QModelIndex &parent = QModelIndex()) const;
-	virtual QVariant		headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const ;
+	virtual int				columnCount(const QModelIndex &parent = QModelIndex()) const = 0;
+	virtual QVariant		headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const = 0;
+
+public slots:
+	void			Clear();
 
 signals:
 	void			CheckChanged(const QVariant& ID, bool State);
+	void			ToolTipCallback(const QVariant& ID, QString& ToolTip) const;
 	void			Updated();
 
 protected:
@@ -42,6 +43,7 @@ protected:
 		STreeNode(const QVariant& Id){
 			ID = Id;
 			Parent = NULL;
+			Row = 0;
 			//AllChildren = 0;
 
 			IsBold = false;
@@ -55,6 +57,7 @@ protected:
 		QVariant			ID;
 
 		STreeNode*			Parent;
+		int					Row;
 		QList<QVariant>		Path;
 		QList<STreeNode*>	Children;
 		//int				AllChildren;
@@ -72,20 +75,43 @@ protected:
 		QVector<SValue>		Values;
 	};
 
-	virtual STreeNode* MkNode(const QVariant& Id) { return new STreeNode(Id); }
+	virtual QVariant	NodeData(STreeNode* pNode, int role, int section) const;
 
-	void			Sync(QMap<QList<QVariant>, QList<STreeNode*> >& New, QMap<QVariant, STreeNode*>& Old);
-	void			Purge(STreeNode* pParent, const QModelIndex &parent, QMap<QVariant, STreeNode*> &Old);
+	virtual STreeNode*	MkNode(const QVariant& Id) = 0; // { return new STreeNode(Id); }
+
+	void			Sync(QMap<QList<QVariant>, QList<STreeNode*> >& New, QHash<QVariant, STreeNode*>& Old);
+	void			Purge(STreeNode* pParent, const QModelIndex &parent, QHash<QVariant, STreeNode*>& Old);
 	void			Fill(STreeNode* pParent, const QModelIndex &parent, const QList<QVariant>& Paths, int PathsIndex, const QList<STreeNode*>& New, const QList<QVariant>& Path);
 	QModelIndex		Find(STreeNode* pParent, STreeNode* pNode);
-	int				CountItems(STreeNode* pRoot);
-
-	QList<QVariant>  MakePath(const QVariantMap& Cur, const QMap<QVariant, QVariantMap>& List);
+	//int				CountItems(STreeNode* pRoot);
 
 	virtual QVariant GetDefaultIcon() const { return QVariant(); }
 
 	STreeNode*							m_Root;
-	QMultiMap<QVariant, STreeNode*>		m_Map;
+	QHash<QVariant, STreeNode*>			m_Map;
 	bool								m_bTree;
 	bool								m_bUseIcons;
+};
+
+class CSimpleTreeModel : public CTreeItemModel
+{
+	Q_OBJECT
+
+public:
+	CSimpleTreeModel(QObject *parent = 0);
+	
+	void					Sync(const QMap<QVariant, QVariantMap>& List);
+
+	void					setHeaderLabels(const QStringList& Columns) { m_Headers = Columns; }
+
+	virtual int				columnCount(const QModelIndex &parent = QModelIndex()) const;
+    virtual QVariant		headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const;
+
+protected:
+	virtual STreeNode*		MkNode(const QVariant& Id) { return new STreeNode(Id); }
+
+	QList<QVariant>			MakePath(const QVariantMap& Cur, const QMap<QVariant, QVariantMap>& List);
+	bool					TestPath(const QList<QVariant>& Path, const QVariantMap& Cur, const QMap<QVariant, QVariantMap>& List, int Index = 0);
+
+	QStringList				m_Headers;
 };

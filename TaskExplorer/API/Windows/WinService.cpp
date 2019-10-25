@@ -1,5 +1,5 @@
 /*
- * Process Hacker -
+ * Task Explorer -
  *   qt wrapper and support functions based on svcsup.c
  *
  * Copyright (C) 2009-2015 wj32
@@ -24,10 +24,10 @@
 
 
 #include "stdafx.h"
-#include "../../GUI/TaskExplorer.h"
 #include "WinService.h"
 #include "WinModule.h"
 #include "WindowsAPI.h"
+#include "../../SVC/TaskService.h"
 
 #include "ProcessHacker.h"
 
@@ -64,10 +64,9 @@ CWinService::CWinService(QObject *parent)
 	m_StartType = 0;
 	m_ErrorControl = 0;
 
-	m = new SWinService();
+	m_KeyLastWriteTime = 0;
 
-	m_pModuleInfo = CModulePtr(new CWinModule());
-	connect(m_pModuleInfo.data(), SIGNAL(AsyncDataDone(bool, ulong, ulong)), this, SLOT(OnAsyncDataDone(bool, ulong, ulong)));
+	m = new SWinService();
 }
 
 CWinService::CWinService(const QString& Name, QObject *parent)
@@ -92,6 +91,10 @@ bool CWinService::InitStaticData(struct _ENUM_SERVICE_STATUS_PROCESSW* service)
 
 	m->NeedsConfigUpdate = TRUE;
 
+	CWinModule* pModule = new CWinModule();
+	m_pModuleInfo = CModulePtr(pModule);
+	connect(pModule, SIGNAL(AsyncDataDone(bool, quint32, quint32)), this, SLOT(OnAsyncDataDone(bool, quint32, quint32)));
+
 	return true;
 }
 
@@ -109,13 +112,14 @@ bool CWinService::UpdatePID(struct _ENUM_SERVICE_STATUS_PROCESSW* service)
 	return true;
 }
 
-bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE_STATUS_PROCESSW* service)
+bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE_STATUS_PROCESSW* service, bool bRefresh)
 {
 	QWriteLocker Locker(&m_Mutex);
 
 	bool modified = FALSE;
 
-	if (m_Type != service->ServiceStatusProcess.dwServiceType ||
+	if (bRefresh || // we want to force a refresh to reload data whcih we normaly not re chack after the first load
+		m_Type != service->ServiceStatusProcess.dwServiceType ||
 		m_State != service->ServiceStatusProcess.dwCurrentState ||
 		m_ControlsAccepted != service->ServiceStatusProcess.dwControlsAccepted ||
 		m_Flags != service->ServiceStatusProcess.dwServiceFlags ||
@@ -177,8 +181,15 @@ bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE
 						PhDereferenceObject(commandLine);
 					}
 				}
-				m_FileName = CastPhString(fileName);
+				QString FileName = CastPhString(fileName);
 				//
+
+				if (m_FileName != FileName)
+				{
+					m_FileName = FileName;
+					if(!m_FileName.isEmpty() && !m_pModuleInfo.isNull())
+						qobject_cast<CWinModule*>(m_pModuleInfo)->InitAsyncData(m_FileName);
+				}
 
 				PhFree(config);
 			}
@@ -198,7 +209,7 @@ bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE
 				PKEY_BASIC_INFORMATION basicInfo;
 				if (NT_SUCCESS(PhQueryKey(keyHandle, KeyBasicInformation, (PVOID*)&basicInfo)))
 				{
-					m_KeyLastWriteTime = QDateTime::fromTime_t(FILETIME2time(basicInfo->LastWriteTime.QuadPart));
+					m_KeyLastWriteTime = FILETIME2time(basicInfo->LastWriteTime.QuadPart);
 					PhFree(basicInfo);
 				}
 
@@ -209,11 +220,6 @@ bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE
 			//
 
 			PhDereferenceObject(Name);
-
-			// get file info
-			// todo dont re do it
-			if (!m_FileName.isEmpty())
-				qobject_cast<CWinModule*>(m_pModuleInfo)->InitAsyncData(m_FileName);
 
 			ULONG returnLength;
 			SERVICE_DELAYED_AUTO_START_INFO delayedAutoStartInfo;
@@ -240,7 +246,7 @@ bool CWinService::UpdateDynamicData(void* pscManagerHandle, struct _ENUM_SERVICE
 	return modified;
 }
 
-void CWinService::OnAsyncDataDone(bool IsPacked, ulong ImportFunctions, ulong ImportModules)
+void CWinService::OnAsyncDataDone(bool IsPacked, quint32 ImportFunctions, quint32 ImportModules)
 {
 }
 
@@ -286,10 +292,10 @@ bool CWinService::IsStopped() const
 	return m_State == SERVICE_STOPPED;
 }
 
-bool CWinService::IsRunning() const
+bool CWinService::IsRunning(bool bStrict) const
 {
 	QReadLocker Locker(&m_Mutex); // is it [still] running or about to start?
-	return m_State == SERVICE_RUNNING || m_State == SERVICE_STOP_PENDING || m_State == SERVICE_START_PENDING;
+	return m_State == SERVICE_RUNNING || (!bStrict && (m_State == SERVICE_STOP_PENDING || m_State == SERVICE_START_PENDING));
 }
 
 bool CWinService::IsPaused() const
@@ -364,7 +370,11 @@ STATUS CWinService::Start()
     {
         NTSTATUS status = PhGetLastWin32ErrorAsNtStatus();
 
-		// todo run itself as service and retry
+		if(CTaskService::CheckStatus(status))
+		{
+			if (CTaskService::ServiceAction(m_SvcName, "Start"))
+				return OK;
+		}
 
 		return ERR(tr("Failed to start service"), status);
     }
@@ -393,7 +403,11 @@ STATUS CWinService::Pause()
     {
         NTSTATUS status = PhGetLastWin32ErrorAsNtStatus();
 
-		// todo run itself as service and retry
+		if(CTaskService::CheckStatus(status))
+		{
+			if (CTaskService::ServiceAction(m_SvcName, "Pause"))
+				return OK;
+		}
 
 		return ERR(tr("Failed to pause service"), status);
     }
@@ -422,7 +436,11 @@ STATUS CWinService::Continue()
     {
         NTSTATUS status = PhGetLastWin32ErrorAsNtStatus();
 
-		// todo run itself as service and retry
+		if(CTaskService::CheckStatus(status))
+		{
+			if (CTaskService::ServiceAction(m_SvcName, "Continue"))
+				return OK;
+		}
 
 		return ERR(tr("Failed to continue service"), status);
     }
@@ -451,9 +469,13 @@ STATUS CWinService::Stop()
     {
         NTSTATUS status = PhGetLastWin32ErrorAsNtStatus();
 
-		// todo run itself as service and retry
+		if(CTaskService::CheckStatus(status))
+		{
+			if (CTaskService::ServiceAction(m_SvcName, "Stop"))
+				return OK;
+		}
 
-		return ERR(tr("Failed to start service"), status);
+		return ERR(tr("Failed to stop service"), status);
     }
 	return OK;
 }
@@ -485,14 +507,18 @@ STATUS CWinService::Delete(bool bForce)
     {
         NTSTATUS status = PhGetLastWin32ErrorAsNtStatus();
 
-		// todo run itself as service and retry
+		if(CTaskService::CheckStatus(status))
+		{
+			if (CTaskService::ServiceAction(m_SvcName, "Delete"))
+				return OK;
+		}
 
 		return ERR(tr("Failed to delete service"), status);
     }
 	return OK;
 }
 
-static NTSTATUS PhpOpenService(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAccess, _In_opt_ PVOID Context)
+NTSTATUS NTAPI CWinService__OpenService(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAccess, _In_opt_ PVOID Context)
 {
 	SC_HANDLE serviceHandle;
 	wstring* pName = ((wstring*)Context);
@@ -506,10 +532,9 @@ static NTSTATUS PhpOpenService(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAcc
 	return PhGetLastWin32ErrorAsNtStatus();
 }
 
-NTSTATUS PhpCloseServiceCallback(_In_opt_ PVOID Context)
+NTSTATUS NTAPI CWinService__cbPermissionsClosed(_In_opt_ PVOID Context)
 {
 	wstring* pName = ((wstring*)Context);
-
 	delete pName;
 
 	return STATUS_SUCCESS;
@@ -517,9 +542,9 @@ NTSTATUS PhpCloseServiceCallback(_In_opt_ PVOID Context)
 
 void CWinService::OpenPermissions()
 {
-	QWriteLocker Locker(&m_Mutex);
 
 	wstring* pName = new wstring;
-	*pName = m_SvcName.toStdWString();
-	PhEditSecurity(NULL, (wchar_t*)m_DisplayName.toStdWString().c_str(), L"Service", (PPH_OPEN_OBJECT)PhpOpenService, (PPH_CLOSE_OBJECT)PhpCloseServiceCallback, pName);
+	*pName = GetName().toStdWString();
+
+	PhEditSecurity(NULL, (wchar_t*)m_DisplayName.toStdWString().c_str(), L"Service", CWinService__OpenService, CWinService__cbPermissionsClosed, pName);
 }

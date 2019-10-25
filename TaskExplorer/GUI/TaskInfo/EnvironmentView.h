@@ -3,7 +3,9 @@
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/TreeWidgetEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
+#include "../../API/ProcessInfo.h"
+#include "../../Common/ListItemModel.h"
+#include "../../Common/SortFilterProxyModel.h"
 
 class CEnvironmentView : public CPanelView
 {
@@ -13,12 +15,15 @@ public:
 	virtual ~CEnvironmentView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					Refresh();
 
 private slots:
+	//void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	//void					OnMenu(const QPoint &point);
-	void					OnItemDoubleClicked(QTreeWidgetItem* pItem, int Column);
+	void					OnItemDoubleClicked(const QModelIndex& Index);
 
 	void					OnEdit();
 	void					OnAdd();
@@ -27,12 +32,14 @@ private slots:
 protected:
 	virtual void				OnMenu(const QPoint& Point);
 	virtual QTreeView*			GetView() 				{ return m_pVariablesList; }
-	virtual QAbstractItemModel* GetModel()				{ return m_pVariablesList->model(); }
+	virtual QAbstractItemModel* GetModel()				{ return m_pSortProxy; }
 
 	CProcessPtr				m_pCurProcess;
 
+	QList<QVariantMap>		m_Variables;
+
 private:
-	enum EStackColumns
+	enum EColumns
 	{
 		eName = 0,
 		eType,
@@ -42,7 +49,9 @@ private:
 
 	QVBoxLayout*			m_pMainLayout;
 
-	QTreeWidgetEx*			m_pVariablesList;
+	QTreeViewEx*			m_pVariablesList;
+	CSimpleListModel*		m_pVariablesModel;
+	CSortFilterProxyModel*	m_pSortProxy;
 
 	//QMenu*					m_pMenu;
 	QAction*				m_pEdit;

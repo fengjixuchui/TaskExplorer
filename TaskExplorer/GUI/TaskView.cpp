@@ -18,6 +18,10 @@ CTaskView::~CTaskView()
 void CTaskView::AddTaskItemsToMenu()
 {
 	m_pTerminate = m_pMenu->addAction(tr("Terminate"), this, SLOT(OnTaskAction()));
+	m_pTerminate->setShortcut(QKeySequence::Delete);
+	m_pTerminate->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	this->addAction(m_pTerminate);
+
 	m_pSuspend = m_pMenu->addAction(tr("Suspend"), this, SLOT(OnTaskAction()));
 	m_pResume = m_pMenu->addAction(tr("Resume"), this, SLOT(OnTaskAction()));
 }
@@ -62,10 +66,6 @@ void CTaskView::AddPriorityItemsToMenu(EPriorityType Style, bool bAddSeparator)
 {
 	if(bAddSeparator)
 		m_pMenu->addSeparator();
-
-	m_pPermissions = m_pMenu->addAction(tr("Permissions"), this, SLOT(OnPermissions()));
-
-	m_pMenu->addSeparator();
 
 	m_pAffinity = m_pMenu->addAction(tr("Affinity"), this, SLOT(OnAffinity()));
 
@@ -168,32 +168,56 @@ void CTaskView::OnMenu(const QPoint& Point)
 	foreach(QAction* pAction, m_pPagePriority->actions())
 		pAction->setChecked(m_pPriorityLevels[pAction].Value == PagePriority);
 
-	m_pPermissions->setEnabled(Tasks.count() == 1);
-
 	CPanelView::OnMenu(Point);
 }
 
 void CTaskView::OnTaskAction()
 {
-	if(QMessageBox("TaskExplorer", tr("Do you want to %1 the selected task(s)").arg(((QAction*)sender())->text().toLower())
-	 , QMessageBox::Question, QMessageBox::Yes, QMessageBox::No | QMessageBox::Default | QMessageBox::Escape, QMessageBox::NoButton).exec() != QMessageBox::Yes)
-		return;
+	if (sender() == m_pTerminate)
+	{
+		if (QMessageBox("TaskExplorer", tr("Do you want to %1 the selected task(s)").arg(((QAction*)sender())->text().toLower())
+			, QMessageBox::Question, QMessageBox::Yes | QMessageBox::Default, QMessageBox::No | QMessageBox::Escape, QMessageBox::NoButton).exec() != QMessageBox::Yes)
+			return;
+	}
 
 	QList<CTaskPtr>	Tasks = GetSellectedTasks();
 
 	QList<STATUS> Errors;
+	int Force = -1;
 	foreach(const CTaskPtr& pTask, Tasks)
 	{
 		STATUS Status = OK;
+retry:
 		if (sender() == m_pTerminate)
-			Status = pTask->Terminate();
+			Status = pTask->Terminate(Force == 1);
 		else if (sender() == m_pSuspend)
 			Status = pTask->Suspend();
 		else if (sender() == m_pResume)
 			Status = pTask->Resume();
 
-		if(Status.IsError())
-			Errors.append(Status);
+		if (Status.IsError())
+		{
+			if (Status.GetStatus() == ERROR_CONFIRM)
+			{
+				if (Force == -1)
+				{
+					switch (QMessageBox("TaskExplorer", Status.GetText(), QMessageBox::Question, QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel | QMessageBox::Default | QMessageBox::Escape).exec())
+					{
+					case QMessageBox::Yes:
+						Force = 1;
+						goto retry;
+						break;
+					case QMessageBox::No:
+						Force = 0;
+						break;
+					case QMessageBox::Cancel:
+						return;
+					}
+				}
+			}
+			else
+				Errors.append(Status);
+		}
 	}
 
 	CTaskExplorer::CheckErrors(Errors);
@@ -214,7 +238,7 @@ void CTaskView::OnAffinity()
 
 		for (int j = 0; j < Affinity.size(); j++)
 		{
-			int curBit = (AffinityMask >> j) & 1ui64;
+            int curBit = (AffinityMask >> j) & 1ULL;
 			if (i == 0)
 				Affinity[j] = curBit;
 			else if (curBit != Affinity[j]) // && Affinity[j] != 2
@@ -239,9 +263,9 @@ void CTaskView::OnAffinity()
 		for (int j = 0; j < Affinity.size(); j++)
 		{
 			if (Affinity[j] == 1)
-				AffinityMask |= (1ui64 << j);
+                AffinityMask |= (1ULL << j);
 			else if(Affinity[j] == 0)
-				AffinityMask &= ~(1ui64 << j);
+                AffinityMask &= ~(1ULL << j);
 		}
 
 		STATUS Status = pTask->SetAffinityMask(AffinityMask);
@@ -270,27 +294,9 @@ void CTaskView::OnPriority()
 		case ePage:		Status = pTask->SetPagePriority(Priority.Value); break;
 		}
 
-		if(Errors.isEmpty())
+		if(Status.IsError())
 			Errors.append(Status);
 	}
 
 	CTaskExplorer::CheckErrors(Errors);
-}
-
-void CTaskView::OnPermissions()
-{
-#ifdef WIN32
-	QList<CTaskPtr>	Tasks = GetSellectedTasks();
-	if (Tasks.count() != 1)
-		return;
-
-	if (QSharedPointer<CWinThread> pWinThread = Tasks.first().objectCast<CWinThread>())
-	{
-		pWinThread->OpenPermissions();
-	}
-	else if (QSharedPointer<CWinProcess> pWinProcess = Tasks.first().objectCast<CWinProcess>())
-	{
-		pWinProcess->OpenPermissions();
-	}
-#endif
 }

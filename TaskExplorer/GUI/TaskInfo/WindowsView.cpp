@@ -2,20 +2,24 @@
 #include "../TaskExplorer.h"
 #include "WindowsView.h"
 #include "../../Common/Common.h"
+#include "../Models/WindowModel.h"
+#include "../../Common/SortFilterProxyModel.h"
+#include "../../Common/Finder.h"
 #ifdef WIN32
-#include "../../API/Windows/WinWnd.h"
 #include "../../API/Windows/ProcessHacker.h"
+#include "../../API/Windows/WinWnd.h"
+#undef IsMinimized
+#undef IsMaximized
 #endif
-#include "..\Models\WindowModel.h"
-#include "..\..\Common\SortFilterProxyModel.h"
 
 
 CWindowsView::CWindowsView(QWidget *parent)
 	:CPanelView(parent)
 {
 	m_LockValue = false;
+	m_PendingUpdates = 0;
 
-	m_pMainLayout = new QHBoxLayout();
+	m_pMainLayout = new QVBoxLayout();
 	m_pMainLayout->setMargin(0);
 	this->setLayout(m_pMainLayout);
 	
@@ -33,7 +37,7 @@ CWindowsView::CWindowsView(QWidget *parent)
 
 	// Window List
 	m_pWindowList = new QTreeViewEx();
-	m_pWindowList->setItemDelegate(new CStyledGridItemDelegate(m_pWindowList->fontMetrics().height() + 3, this));
+	m_pWindowList->setItemDelegate(theGUI->GetItemDelegate());
 
 	m_pWindowList->setModel(m_pSortProxy);
 
@@ -47,18 +51,25 @@ CWindowsView::CWindowsView(QWidget *parent)
 	m_pWindowList->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_pWindowList, SIGNAL(customContextMenuRequested( const QPoint& )), this, SLOT(OnMenu(const QPoint &)));
 
-	//m_pMainLayout->addWidget(m_pWindowList);
-	m_pSplitter->addWidget(m_pWindowList);
+	connect(theGUI, SIGNAL(ReloadPanels()), m_pWindowModel, SLOT(Clear()));
+
+	m_pWindowList->setColumnReset(2);
+	connect(m_pWindowList, SIGNAL(ResetColumns()), this, SLOT(OnResetColumns()));
+	connect(m_pWindowList, SIGNAL(ColumnChanged(int, bool)), this, SLOT(OnColumnsChanged()));
+
+	m_pSplitter->addWidget(CFinder::AddFinder(m_pWindowList, m_pSortProxy));
 	m_pSplitter->setCollapsible(0, false);
 	// 
+
+
 
 	connect(m_pWindowList, SIGNAL(clicked(const QModelIndex&)), this, SLOT(OnItemSelected(const QModelIndex&)));
 	connect(m_pWindowList->selectionModel(), SIGNAL(currentChanged(QModelIndex, QModelIndex)), this, SLOT(OnItemSelected(QModelIndex)));
 
 	// Handle Details
-	m_pWindowDetails = new CPanelWidget<QTreeWidgetEx>();
+	m_pWindowDetails = new CPanelWidgetEx();
 
-	m_pWindowDetails->GetView()->setItemDelegate(new CStyledGridItemDelegate(m_pWindowDetails->fontMetrics().height() + 3, this));
+	m_pWindowDetails->GetView()->setItemDelegate(theGUI->GetItemDelegate());
 	((QTreeWidgetEx*)m_pWindowDetails->GetView())->setHeaderLabels(tr("Name|Value").split("|"));
 
 	m_pWindowDetails->GetView()->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -68,8 +79,9 @@ CWindowsView::CWindowsView(QWidget *parent)
 	//m_pSplitter->setCollapsible(1, false);
 	//
 
+	m_ViewMode = eNone;
 	setObjectName(parent->objectName());
-	m_pWindowList->header()->restoreState(theConf->GetBlob(objectName() + "/WindowsView_Columns"));
+	SwitchView(eSingle);
 	m_pSplitter->restoreState(theConf->GetBlob(objectName() + "/WindowsView_Splitter"));
 	m_pWindowDetails->GetView()->header()->restoreState(theConf->GetBlob(objectName() + "/WindowsDetail_Columns"));
 
@@ -83,6 +95,9 @@ CWindowsView::CWindowsView(QWidget *parent)
 	m_pMinimize = m_pMenu->addAction(tr("Minimize"), this, SLOT(OnWindowAction()));
 	m_pMaximize = m_pMenu->addAction(tr("Maximize"), this, SLOT(OnWindowAction()));
 	m_pClose = m_pMenu->addAction(tr("Close"), this, SLOT(OnWindowAction()));
+	m_pClose->setShortcut(QKeySequence::Delete);
+	m_pClose->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	this->addAction(m_pClose);
 
 	m_pMenu->addSeparator();
 	m_pVisible = m_pMenu->addAction(tr("Visible"), this, SLOT(OnWindowAction()));
@@ -102,23 +117,65 @@ CWindowsView::CWindowsView(QWidget *parent)
 	AddPanelItemsToMenu();
 }
 
-
 CWindowsView::~CWindowsView()
 {
-	theConf->SetBlob(objectName() + "/WindowsView_Columns", m_pWindowList->header()->saveState());
+	SwitchView(eNone);
 	theConf->SetBlob(objectName() + "/WindowsView_Splitter",m_pSplitter->saveState());
 	theConf->SetBlob(objectName() + "/WindowsDetail_Columns", m_pWindowDetails->GetView()->header()->saveState());
 }
 
-void CWindowsView::ShowProcess(const CProcessPtr& pProcess)
+void CWindowsView::SwitchView(EView ViewMode)
 {
-	if (m_pCurProcess != pProcess)
+	switch (m_ViewMode)
 	{
-		disconnect(this, SLOT(OnWindowsUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
+		case eSingle:	theConf->SetBlob(objectName() + "/WindowsView_Columns", m_pWindowList->saveState()); break;
+		case eMulti:	theConf->SetBlob(objectName() + "/WindowsMultiView_Columns", m_pWindowList->saveState()); break;
+	}
 
-		m_pCurProcess = pProcess;
+	m_ViewMode = ViewMode;
 
-		connect(m_pCurProcess.data(), SIGNAL(WindowsUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)), this, SLOT(OnWindowsUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
+	QByteArray Columns;
+	switch (m_ViewMode)
+	{
+		case eSingle:	Columns = theConf->GetBlob(objectName() + "/WindowsView_Columns"); break;
+		case eMulti:	Columns = theConf->GetBlob(objectName() + "/WindowsMultiView_Columns"); break;
+		default:
+			return;
+	}
+	
+	if (Columns.isEmpty())
+		OnResetColumns();
+	else
+		m_pWindowList->restoreState(Columns);
+}
+
+void CWindowsView::OnResetColumns()
+{
+	for (int i = 0; i < m_pWindowModel->columnCount(); i++)
+		m_pWindowList->SetColumnHidden(i, false);
+}
+
+void CWindowsView::OnColumnsChanged()
+{
+	m_pWindowModel->Sync(m_Windows);
+}
+
+void CWindowsView::ShowProcesses(const QList<CProcessPtr>& Processes)
+{
+	if (m_Processes != Processes)
+	{
+		disconnect(this, SLOT(ShowWindows(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
+
+		m_Processes = Processes;
+		m_PendingUpdates = 0;
+
+		m_pWindowModel->SetExtThreadId(m_Processes.size() > 1);
+		m_pWindowModel->Clear();
+
+		SwitchView(m_Processes.size() > 1 ? eMulti : eSingle);
+
+		foreach(const CProcessPtr& pProcess, m_Processes)
+			connect(pProcess.data(), SIGNAL(WindowsUpdated(QSet<quint64>, QSet<quint64>, QSet<quint64>)), this, SLOT(ShowWindows(QSet<quint64>, QSet<quint64>, QSet<quint64>)));
 	}
 
 	Refresh();
@@ -126,17 +183,45 @@ void CWindowsView::ShowProcess(const CProcessPtr& pProcess)
 
 void CWindowsView::Refresh()
 {
-	if (!m_pCurProcess)
+	if (m_PendingUpdates > 0)
 		return;
 
-	QTimer::singleShot(0, m_pCurProcess.data(), SLOT(UpdateWindows()));
+	m_PendingUpdates = 0;
+	foreach(const CProcessPtr& pProcess, m_Processes)
+	{
+		m_PendingUpdates++;
+		QTimer::singleShot(0, pProcess.data(), SLOT(UpdateWindows()));
+	}
 }
 
-void CWindowsView::OnWindowsUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed)
+void CWindowsView::ShowWindows(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed)
 {
-	QMap<quint64, CWndPtr> Windows = m_pCurProcess->GetWindowList();
+	/*if (m_Processes.count() == 1)
+	{
+		m_PendingUpdates = 0;
 
-	m_pWindowModel->Sync(Windows);
+		m_Windows = m_Processes.first()->GetWindowList();
+
+		m_pWindowModel->Sync(m_Windows);
+	}
+	else*/
+	{
+		if (--m_PendingUpdates != 0)
+			return;
+
+		m_Windows.clear();
+
+		foreach(const CProcessPtr& pProcess, m_Processes) {
+			QMap<quint64, CWndPtr> Windows = pProcess->GetWindowList();
+			for (QMap<quint64, CWndPtr>::iterator I = Windows.begin(); I != Windows.end(); I++)
+			{
+				ASSERT(!m_Windows.contains(I.key()));
+				m_Windows.insert(I.key(), I.value());
+			}
+		}
+
+		Added = m_pWindowModel->Sync(m_Windows);
+	}
 
 	QTimer::singleShot(100, this, [this, Added]() {
 		foreach(quint64 ID, Added)
@@ -151,6 +236,9 @@ void CWindowsView::OnMenu(const QPoint &point)
 	int Enabled = 0;
 	int OnTop = 0;
 	int Opacity = 255;
+	int Normal = 0;
+	int Mimimized = 0;
+	int Maximized = 0;
 	foreach(const QModelIndex& Index, m_pWindowList->selectedRows())
 	{
 		QModelIndex ModelIndex = m_pSortProxy->mapToSource(Index);
@@ -165,6 +253,12 @@ void CWindowsView::OnMenu(const QPoint &point)
 			Enabled++;
 		if (pWindow->IsAlwaysOnTop())
 			OnTop++;
+		if (pWindow->IsNormal())
+			Normal++;
+		if (pWindow->IsMinimized())
+			Mimimized++;
+		if (pWindow->IsMaximized())
+			Maximized++;
 
 		Opacity = pWindow->GetWindowAlpha(); // just take the last one
 	}
@@ -174,9 +268,9 @@ void CWindowsView::OnMenu(const QPoint &point)
 	m_pBringToFront->setEnabled(Count == 1);
 	m_pHighlight->setEnabled(Count == 1);
 
-	m_pRestore->setEnabled(Count >= 1);
-	m_pMinimize->setEnabled(Count >= 1);
-	m_pMaximize->setEnabled(Count >= 1);
+	m_pRestore->setEnabled(Normal < Count);
+	m_pMinimize->setEnabled(Mimimized < Count);
+	m_pMaximize->setEnabled(Maximized < Count);
 	m_pClose->setEnabled(Count >= 1);
 
 	m_pVisible->setEnabled(Count >= 1);
@@ -197,6 +291,12 @@ void CWindowsView::OnWindowAction()
 {
 	if (m_LockValue)
 		return;
+
+	if (sender() == m_pClose)
+	{
+		if (QMessageBox("TaskExplorer", tr("Do you want to close the selected window(s)"), QMessageBox::Question, QMessageBox::Yes | QMessageBox::Default, QMessageBox::No | QMessageBox::Escape, QMessageBox::NoButton).exec() != QMessageBox::Yes)
+			return;
+	}
 
 	// QList<STATUS> Errors;
 	foreach(const QModelIndex& Index, m_pWindowList->selectedRows())
@@ -256,7 +356,7 @@ void CWindowsView::OnItemSelected(const QModelIndex &current)
 	pDetails->clear();
 
 #ifdef WIN32
-	CWinWnd::SWndInfo WndInfo = pWindow.objectCast<CWinWnd>()->GetWndInfo();
+	CWinWnd::SWndInfo WndInfo = pWindow.staticCast<CWinWnd>()->GetWndInfo();
 
 	QTreeWidgetItem* pGeneral = new QTreeWidgetItem(QStringList(tr("General")));
 	pDetails->addTopLevelItem(pGeneral);

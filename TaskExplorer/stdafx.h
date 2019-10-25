@@ -102,6 +102,10 @@ using namespace std;
 #include <QFileDialog>
 #include <QProgressBar>
 #include <QInputDialog>
+#include <QToolTip>
+#include <QColorDialog>
+#include <QToolButton>
+#include <QScreen>
 
 // other includes
 
@@ -125,3 +129,7 @@ using namespace std;
 #endif
 
 #include "Common/DebugHelpers.h"
+
+#define USE_QEXTWIDGETS
+
+extern class CSettings*		theConf;

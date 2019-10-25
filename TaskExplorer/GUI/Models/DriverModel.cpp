@@ -18,14 +18,15 @@ CDriverModel::~CDriverModel()
 void CDriverModel::Sync(QMap<QString, CDriverPtr> DriverList)
 {
 	QList<SListNode*> New;
-	QMap<QVariant, SListNode*> Old = m_Map;
+	QHash<QVariant, SListNode*> Old = m_Map;
 
 	foreach (const CDriverPtr& pDriver, DriverList)
 	{
 		QVariant ID = pDriver->GetBinaryPath();
 
 		int Row = -1;
-		SDriverNode* pNode = static_cast<SDriverNode*>(Old[ID]);
+		QHash<QVariant, SListNode*>::iterator I = Old.find(ID);
+		SDriverNode* pNode = I != Old.end() ? static_cast<SDriverNode*>(I.value()) : NULL;
 		if(!pNode)
 		{
 			pNode = static_cast<SDriverNode*>(MkNode(ID));
@@ -35,20 +36,24 @@ void CDriverModel::Sync(QMap<QString, CDriverPtr> DriverList)
 		}
 		else
 		{
-			Old[ID] = NULL;
-			Row = m_List.indexOf(pNode);
+			I.value() = NULL;
+			Row = GetRow(pNode);
 		}
 
 		int Col = 0;
 		bool State = false;
 		bool Changed = false;
 
+		CModulePtr pModule = pDriver->GetModuleInfo();
 #ifdef WIN32
 		CWinDriver* pWinDriver = qobject_cast<CWinDriver*>(pDriver.data());
 #endif
 
-		for(int section = eDriver; section < columnCount(); section++)
+		for(int section = 0; section < columnCount(); section++)
 		{
+			if (!m_Columns.contains(section))
+				continue; // ignore columns which are hidden
+
 			QVariant Value;
 			switch(section)
 			{
@@ -56,9 +61,9 @@ void CDriverModel::Sync(QMap<QString, CDriverPtr> DriverList)
 #ifdef WIN32
 				case eImageBase:			Value = pWinDriver->GetImageBase(); break;
 				case eImageSize:			Value = pWinDriver->GetImageSize(); break;
-				case eDescription:			Value = pDriver->GetModuleInfo()->GetFileInfo("Description"); break;
-				case eCompanyName:			Value = pDriver->GetModuleInfo()->GetFileInfo("CompanyName"); break;
-				case eVersion:				Value = pDriver->GetModuleInfo()->GetFileInfo("FileVersion"); break;
+				case eDescription:			Value = pModule ? pModule->GetFileInfo("Description") : ""; break;
+				case eCompanyName:			Value = pModule ? pModule->GetFileInfo("CompanyName") : ""; break;
+				case eVersion:				Value = pModule ? pModule->GetFileInfo("FileVersion") : ""; break;
 #endif
 				case eBinaryPath:			Value = pDriver->GetBinaryPath(); break;
 			}
@@ -72,8 +77,11 @@ void CDriverModel::Sync(QMap<QString, CDriverPtr> DriverList)
 
 				switch (section)
 				{
-					case eImageBase:	ColValue.Formated = "0x" + QString::number(Value.toULongLong(), 16); break;
+                    case eDriver: break;
+#ifdef WIN32
+					case eImageBase:	ColValue.Formated = FormatAddress(Value.toULongLong()); break;
 					case eImageSize:	ColValue.Formated = FormatSize(Value.toULongLong()); break;			
+#endif
 				}
 			}
 

@@ -1,12 +1,19 @@
 #pragma once
 #include <qwidget.h>
-#include "..\..\Common\TabPanel.h"
+#include "../../Common/TabPanel.h"
 
-#include "SystemView.h"
-#include "DriversView.h"
-#include "../TaskInfo/HandlesView.h"
-#include "../TaskInfo/SocketsView.h"
-#include "ServicesView.h"
+class CSystemView;
+class CHandlesView;
+class CSocketsView;
+class CServicesView;
+//class CDriversView;
+class CKernelView;
+class CDnsCacheView;
+class CCPUView;
+class CRAMView;
+class CDiskView;
+class CNetworkView;
+class CGPUView;
 
 class CSystemInfoView : public CTabPanel
 {
@@ -15,22 +22,26 @@ public:
 	CSystemInfoView(QWidget* patent = 0);
 	virtual ~CSystemInfoView();
 
-#ifdef WIN32
-	void					SetShowKernelServices(bool bShow);
-#endif
-
 public slots:
 	void				OnTab(int tabIndex);
 	void				Refresh();
+	void				UpdateGraphs();
 
 protected:
 	virtual void		InitializeTabs();
 
 private:
 	CSystemView*		m_pSystemView;
-	CDriversView*		m_pDriversView;
 	CHandlesView*		m_pAllFilesView;
 	CSocketsView*		m_pAllSocketsView;
+	CDnsCacheView*		m_pDnsCacheView;
 	CServicesView*		m_pServicesView;
+	//CDriversView*		m_pDriversView;
+	CKernelView*		m_pKernelView;
+	CCPUView*			m_pCPUView;
+	CRAMView*			m_pRAMView;
+	CDiskView*			m_pDiskView;
+	CNetworkView*		m_pNetworkView;
+	CGPUView*			m_pGPUView;
 };
 

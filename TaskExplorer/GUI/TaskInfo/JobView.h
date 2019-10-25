@@ -1,7 +1,7 @@
 #pragma once
 #include <qwidget.h>
-#include "..\..\Common\PanelView.h"
-#include "..\StatsView.h"
+#include "../../Common/PanelView.h"
+#include "../StatsView.h"
 #ifdef WIN32
 #include "../../API/Windows/WinProcess.h"
 #endif
@@ -19,11 +19,14 @@ public:
 	virtual ~CJobView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					ShowJob(const CWinJobPtr& pJob);
 	void					Refresh();
 
 private slots:
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	//void					OnMenu(const QPoint &point);
 
 	void					OnPermissions();
@@ -35,8 +38,10 @@ protected:
 	virtual QTreeView*			GetView() 				{ return m_pProcessList; }
 	virtual QAbstractItemModel* GetModel()				{ return m_pSortProxy; }
 
-	CProcessPtr				m_pCurProcess;
-	CWinJobPtr				m_pCurJob;
+	QSharedPointer<CWinProcess>	m_pCurProcess;
+	CWinJobPtr					m_pCurJob;
+
+	QMap<quint64, CProcessPtr>	m_ProcessList;
 
 private:
 	enum EStackColumns
@@ -51,6 +56,7 @@ private:
 
 	//QLabel*					m_pJobNameLabel;
 	QLineEdit*				m_pJobName;
+	QLabel*					m_pJobId;
 	QPushButton*			m_pTerminate;
 
 	QSplitter*				m_pSplitter;
@@ -66,7 +72,9 @@ private:
 
 	QPushButton*			m_pAddProcess;
 
-	// Limits....
+	QTabWidget*				m_pAdvancedTabs;
+
+	CPanelWidgetEx* m_pLimits;
 
 	//QLabel*					m_pJobStatsLabel;
 	CStatsView*				m_pJobStats;

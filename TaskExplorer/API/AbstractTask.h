@@ -1,8 +1,31 @@
 #pragma once
 #include <qobject.h>
-#include "..\Common\Common.h"
+#include "../Common/Common.h"
 #include "../Common/FlexError.h"
 #include "AbstractInfo.h"
+#include "MiscStats.h"
+
+struct STimeUsage
+{
+	STimeUsage()
+	{
+		Usage = 0;
+	}
+
+	void			Calculate(quint64 totalTime)
+	{
+		if (!totalTime)
+			return;
+
+		Usage = (float)Delta.Delta / totalTime;
+
+		if (Usage > 1)
+			Usage = 1;
+	}
+
+	SDelta64 		Delta;
+	float			Usage; 
+};
 
 struct STaskStats
 {
@@ -18,7 +41,7 @@ struct STaskStats
 	SDelta64 		CpuKernelDelta;
 	SDelta64 		CpuUserDelta;
 	SDelta64 		CycleDelta;
-	SDelta32 		ContextSwitchesDelta;
+	SDelta32_64 		ContextSwitchesDelta;
 
 	float			CpuUsage; 
 	float			CpuKernelUsage;
@@ -41,16 +64,19 @@ public:
 	virtual QString GetPriorityString() const = 0;
 	virtual STATUS SetPriority(long Value) = 0;
 	virtual long GetBasePriority()	const			{ QReadLocker Locker(&m_Mutex); return m_BasePriority; }
+	virtual QString GetBasePriorityString() const = 0;
 	virtual STATUS SetBasePriority(long Value) = 0;
 	virtual long GetPagePriority() const			{ QReadLocker Locker(&m_Mutex); return m_PagePriority; }
+	virtual QString GetPagePriorityString() const = 0;
 	virtual STATUS SetPagePriority(long Value) = 0;
 	virtual long GetIOPriority() const				{ QReadLocker Locker(&m_Mutex); return m_IOPriority; }
+	virtual QString GetIOPriorityString() const = 0;
 	virtual STATUS SetIOPriority(long Value) = 0;
 
 	virtual quint64 GetAffinityMask() const				{ QReadLocker Locker(&m_Mutex); return m_AffinityMask; }
 	virtual STATUS SetAffinityMask(quint64 Value) = 0;
 
-	virtual STATUS Terminate() = 0;
+	virtual STATUS Terminate(bool bForce) = 0;
 
 	virtual bool IsSuspended() const = 0;
 	virtual STATUS Suspend() = 0;

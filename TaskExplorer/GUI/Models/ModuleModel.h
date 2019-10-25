@@ -1,7 +1,7 @@
 #pragma once
 #include <qwidget.h>
-#include "..\..\API\ModuleInfo.h"
-#include "..\..\Common\TreeItemModel.h"
+#include "../../API/ModuleInfo.h"
+#include "../../Common/TreeItemModel.h"
 
 
 class CModuleModel : public CTreeItemModel
@@ -12,7 +12,7 @@ public:
     CModuleModel(QObject *parent = 0);
 	~CModuleModel();
 
-	void			Sync(const QMap<quint64, CModulePtr>& ModuleList);
+	QSet<quint64>	Sync(const QMap<quint64, CModulePtr>& ModuleList);
 
 	CModulePtr		GetModule(const QModelIndex &index) const;
 
@@ -22,11 +22,11 @@ public:
 	enum EColumns
 	{
 		eModule = 0,
+		eModuleFile,
 		eBaseAddress,
 		eSize,
 #ifdef WIN32
 		eDescription,
-
 		eCompanyName,
 		eVersion,
 #endif
@@ -46,6 +46,7 @@ public:
 		eFileSize,
 #ifdef WIN32
 		eEntryPoint,
+		eService,
 #endif
 		eParentBaseAddress,
 		eCount
@@ -59,9 +60,10 @@ protected:
 		CModulePtr			pModule;
 	};
 
-	virtual STreeNode* MkNode(const QVariant& Id) { return new SModuleNode(Id); }
+	virtual STreeNode*		MkNode(const QVariant& Id) { return new SModuleNode(Id); }
 
-	QList<QVariant>  MakeModPath(const CModulePtr& pModule, const QMap<quint64, CModulePtr>& ModuleList);
+	QList<QVariant>			MakeModPath(const CModulePtr& pModule, const QMap<quint64, CModulePtr>& ModuleList);
+	bool					TestModPath(const QList<QVariant>& Path, const CModulePtr& pModule, const QMap<quint64, CModulePtr>& ModuleList, int Index = 0);
 
-	virtual QVariant GetDefaultIcon() const;
+	virtual QVariant		GetDefaultIcon() const;
 };

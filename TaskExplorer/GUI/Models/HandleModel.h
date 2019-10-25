@@ -1,7 +1,7 @@
 #pragma once
 #include <qwidget.h>
 #include "Common/ListItemModel.h"
-#include "..\..\API\HandleInfo.h"
+#include "../../API/HandleInfo.h"
 
 class CHandleModel : public CListItemModel
 {
@@ -12,6 +12,8 @@ public:
 	~CHandleModel();
 
 	void			Sync(QMap<quint64, CHandlePtr> HandleList);
+
+	void			SetSizePosNA(bool bSet) { m_SizePosNA = bSet; }
 
 	CHandlePtr		GetHandle(const QModelIndex &index) const;
 
@@ -26,6 +28,7 @@ public:
 		eName,
 		ePosition,
 		eSize,
+		//eRefs,
 		eGrantedAccess,
 #ifdef WIN32
 		eFileShareAccess,
@@ -48,6 +51,7 @@ protected:
 
 	virtual SListNode* MkNode(const QVariant& Id) { return new SHandleNode(Id); }
 
+	bool m_SizePosNA;
 	
 	virtual QVariant GetDefaultIcon() const;
 };

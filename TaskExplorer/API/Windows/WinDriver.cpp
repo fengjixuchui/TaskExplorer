@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "../../GUI/TaskExplorer.h"
 #include "WinDriver.h"
 #include "WinModule.h"
 #include "WindowsAPI.h"
@@ -11,9 +10,6 @@ CWinDriver::CWinDriver(QObject *parent)
 {
 	m_ImageBase = 0;
 	m_ImageSize = 0;
-
-	m_pModuleInfo = CModulePtr(new CWinModule());
-	connect(m_pModuleInfo.data(), SIGNAL(AsyncDataDone(bool, ulong, ulong)), this, SLOT(OnAsyncDataDone(bool, ulong, ulong)));
 }
 
 CWinDriver::~CWinDriver()
@@ -36,12 +32,16 @@ bool CWinDriver::InitStaticData(struct _RTL_PROCESS_MODULE_INFORMATION* Module)
 
 	m_CreateTimeStamp = GetTime() * 1000;
 
-	qobject_cast<CWinModule*>(m_pModuleInfo)->InitAsyncData(m_BinaryPath);
+	CWinModule* pModule = new CWinModule();
+	m_pModuleInfo = CModulePtr(pModule);
+	connect(pModule, SIGNAL(AsyncDataDone(bool, quint32, quint32)), this, SLOT(OnAsyncDataDone(bool, quint32, quint32)));
+	pModule->InitStaticData(m_BinaryPath);
+	pModule->InitAsyncData();
 
 	return true;
 }
 
-void CWinDriver::OnAsyncDataDone(bool IsPacked, ulong ImportFunctions, ulong ImportModules)
+void CWinDriver::OnAsyncDataDone(bool IsPacked, quint32 ImportFunctions, quint32 ImportModules)
 {
 }
 

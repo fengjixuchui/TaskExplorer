@@ -7,11 +7,16 @@
 #include "ThreadsView.h"
 #include "ModulesView.h"
 #include "MemoryView.h"
+#ifdef WIN32
 #include "JobView.h"
 #include "TokenView.h"
+#include "DotNetView.h"
+#include "GDIView.h"
+#endif
 #include "WindowsView.h"
 #include "EnvironmentView.h"
 #include "../SystemInfo/ServicesView.h"
+#include "../SystemInfo/DnsCacheView.h"
 
 
 CTaskInfoView::CTaskInfoView(bool bAsWindow, QWidget* patent)
@@ -24,6 +29,8 @@ CTaskInfoView::CTaskInfoView(bool bAsWindow, QWidget* patent)
 	int ActiveTab = theConf->GetValue(objectName() + "/Tabs_Active").toInt();
 	QStringList VisibleTabs = theConf->GetStringList(objectName() + "/Tabs_Visible");
 	RebuildTabs(ActiveTab, VisibleTabs);
+
+	connect(m_pTabs, SIGNAL(currentChanged(int)), this, SLOT(OnTab(int)));
 }
 
 
@@ -50,7 +57,7 @@ void CTaskInfoView::InitializeTabs()
 	m_pThreadsView = new CThreadsView(this);
 	AddTab(m_pThreadsView, tr("Threads"));
 
-	m_pModulesView = new CModulesView(this);
+	m_pModulesView = new CModulesView(false, this);
 	AddTab(m_pModulesView, tr("Modules"));
 
 	m_pWindowsView = new CWindowsView(this);
@@ -68,17 +75,32 @@ void CTaskInfoView::InitializeTabs()
 
 	m_pServiceView = new CServicesView(false, this);
 	AddTab(m_pServiceView, tr("Service"));
+
+	m_pDotNetView = new CDotNetView(this);
+	AddTab(m_pDotNetView, tr(".NET"));
+
+	m_pGDIView = new CGDIView(this);
+	AddTab(m_pGDIView, tr("GDI"));
 #endif
+
+	//m_pDnsCacheView = new CDnsCacheView(false, this);
+	//AddTab(m_pDnsCacheView, tr("Dns Cache"));
 
 	m_pEnvironmentView = new CEnvironmentView(this);
 	AddTab(m_pEnvironmentView, tr("Environment"));
-
-	connect(m_pTabs, SIGNAL(currentChanged(int)), this, SLOT(OnTab(int)));
 }
 
-void CTaskInfoView::ShowProcess(const CProcessPtr& pProcess)
+/*void CTaskInfoView::ShowProcess(const CProcessPtr& pProcess)
 {
-	m_pCurProcess = pProcess;
+
+}*/
+
+void CTaskInfoView::ShowProcesses(const QList<CProcessPtr>& Processes)
+{
+	if (m_Processes == Processes)
+		return;
+
+	m_Processes = Processes;
 
 	OnTab(m_pTabs->currentIndex());
 }
@@ -91,8 +113,11 @@ void CTaskInfoView::SellectThread(quint64 ThreadId)
 
 void CTaskInfoView::OnTab(int tabIndex)
 {
-	if (!m_pCurProcess.isNull())
-		QMetaObject::invokeMethod(m_pTabs->currentWidget(), "ShowProcess", Qt::AutoConnection, Q_ARG(const CProcessPtr&, m_pCurProcess));
+	if (!m_Processes.isEmpty())
+	{
+		//QMetaObject::invokeMethod(m_pTabs->currentWidget(), "ShowProcess", Qt::AutoConnection, Q_ARG(const CProcessPtr&, m_Processes.first()));
+		QMetaObject::invokeMethod(m_pTabs->currentWidget(), "ShowProcesses", Qt::AutoConnection, Q_ARG(const QList<CProcessPtr>&, m_Processes));
+	}
 }
 
 void CTaskInfoView::Refresh()

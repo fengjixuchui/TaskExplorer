@@ -1,8 +1,33 @@
+/*
+ * Task Explorer -
+ *   qt port of the Extended Service Plugin
+ *
+ * Copyright (C) 2011-2015 wj32
+ * Copyright (C) 2019 David Xanatos
+ *
+ * This file is part of Task Explorer and contains Process Hacker code.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Process Hacker.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "stdafx.h"
 #include "WinSvcTrigger.h"
-#include "../API/Windows/ProcessHacker/PhSvc.h"
-#include "../Common/ComboInputDialog.h"
-#include "../Common/MultiLineInputDialog.h"
+#ifdef WIN32
+#include "../../API/Windows/ProcessHacker/PhSvc.h"
+#endif
+#include "../../Common/ComboInputDialog.h"
+#include "../../Common/MultiLineInputDialog.h"
 
 
 CWinSvcTrigger::CWinSvcTrigger(QWidget *parent)
@@ -139,7 +164,7 @@ void CWinSvcTrigger::FixServiceTriggerControls()
 bool EspSetTriggerData(const QString& Value, PES_TRIGGER_DATA Data)
 {
 	// todo: add for every type a sanity check
-	// todo handle number input as hex
+	// todo: handle number input as hex
 	if (Data->Type == SERVICE_TRIGGER_DATA_TYPE_STRING)
 	{
 		if(Data->String)
@@ -181,7 +206,7 @@ bool EspSetTriggerData(const QString& Value, PES_TRIGGER_DATA Data)
 QString EspFormatTriggerData(PES_TRIGGER_DATA Data, bool bForDisplay = true)
 {
 	QString Text = "";
-	// todo display numbers as hex
+	// todo: display numbers as hex
     if (Data->Type == SERVICE_TRIGGER_DATA_TYPE_STRING)
     {
         // This check works for both normal strings and multistrings.

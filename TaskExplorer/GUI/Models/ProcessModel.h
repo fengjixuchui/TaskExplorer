@@ -1,7 +1,7 @@
 #pragma once
 #include <qwidget.h>
-#include "..\..\API\ProcessInfo.h"
-#include "..\..\Common\TreeItemModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../../Common/TreeItemModel.h"
 
 class CProcessModel : public CTreeItemModel
 {
@@ -13,46 +13,40 @@ public:
 
 	void			SetUseDescr(bool bDescr)	{ m_bUseDescr = bDescr; }
 
-	void			Sync(QMap<quint64, CProcessPtr> ProcessList);
+	QSet<quint64>	Sync(QMap<quint64, CProcessPtr> ProcessList);
 
 	CProcessPtr		GetProcess(const QModelIndex &index) const;
 
     int				columnCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant		headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const;
 
-	bool			IsColumnEnabled(int column);
-	int				GetColumnIndex(int index);
-	void			SetColumnEnabled(int column, bool set);
-	QString			GetColumn(int column) const;
-	int				MaxColumns() const;
-	QVector<int>	GetColumns() const { return m_Columns; }
+	QString			GetColumHeader(int column) const;
 
 	enum EColumns
 	{
 		eProcess = 0,
 		ePID,
-		eCPU_History,
-		eMEM_History,
-		eIO_History,
-		eNET_History,
 		eStaus,
 		eUserName,
 #ifdef WIN32
 		eServices,
 #endif
+		eNetUsage,
 		eUpTime,
 		eStartTime,
-/*#ifdef WIN32
-		eWindowTitle,
-		eWindowStatus,
-#endif*/
 		eElevation,
 		eCommandLine,
 
+		// Graphs
+		eCPU_History,
+		eMEM_History,
+		eIO_History,
+		eNET_History,
+		eGPU_History,
+		eVMEM_History,
+
 		// CPU
 		eCPU,
-		ePriorityClass,
-		eBasePriority,
 		eTotalCPU_Time,
 		eKernelCPU_Time,
 		eUserCPU_Time,
@@ -64,32 +58,49 @@ public:
 		// Memory
 		ePrivateBytes,
 		ePeakPrivateBytes,
-		ePagePriority,
 		eWorkingSet,
 		ePeakWS,
 		ePrivateWS,
-		eSharedWS,
-		eShareableWS,
 		eVirtualSize,
 		ePeakVirtualSize,
 		ePageFaults,
 		ePageFaultsDelta,
+		eHardFaults,
+		eHardFaultsDelta,
+#ifdef WIN32
 		ePagedPool,
 		ePeakPagedPool,
 		eNonPagedPool,
 		ePeakNonPagedPool,
+#endif
+		eSharedWS,
+		eShareableWS,
 		eMinimumWS,
 		eMaximumWS,
 		ePrivateBytesDelta,
 
+		// GPU
+		eGPU_Usage,
+		eGPU_Shared,
+		eGPU_Dedicated,
+		eGPU_Adapter,
+
+		// Priority
+		ePriorityClass,
+		eBasePriority,
+		ePagePriority,
+		eIO_Priority,
+
 		// objects
 		eHandles,
+		ePeakHandles,
 #ifdef WIN32
 		eWND_Handles,
 		eGDI_Handles,
 		eUSER_Handles,
 #endif
 		eThreads,
+		ePeakThreads,
 
 		//Protection
 #ifdef WIN32
@@ -98,7 +109,6 @@ public:
 		eVerifiedSigner,
 		eASLR,
 		eDEP,
-		eVirtualized,
 		eCF_Guard,
 		eProtection,
 		eCritical,
@@ -106,7 +116,6 @@ public:
 
 		// IO
 		eIO_TotalRate,
-		eIO_Priority,
 		eIO_Reads,
 		eIO_Writes,
 		eIO_Other,
@@ -142,9 +151,13 @@ public:
 
 		// Other
 		eSubsystem, // WSL or Wine
+		eVirtualized,
 		eArch,
 #ifdef WIN32
 		eOS_Context,
+
+		eWindowTitle,
+		eWindowStatus,
 
 		ePackageName,
 		eAppID,
@@ -152,6 +165,11 @@ public:
 
 		eJobObjectID,
 		eDesktop,
+
+		eRunningTime,
+		eSuspendedTime,
+		eHangCount,
+		eGhostCount,
 #endif
 		eSessionID,
 
@@ -163,7 +181,7 @@ public:
 		eReceiveBytes,
 		eSendBytes,
 		//case eTotalBytes,
-		eReceivesDetla,
+		eReceivesDelta,
 		eSendsDelta,
 		eReceiveBytesDelta,
 		eSendBytesDelta,
@@ -186,12 +204,6 @@ public:
 		eReadRate,
 		eWriteRate,
 
-		/*eHardFaults,
-		eHardFaultsDelta,
-		ePeakThreads,
-		eGPU,
-		eGPU_DedicatedBytes,
-		eGPU_SharedBytes,*/
 		eCount
 	};
 
@@ -203,15 +215,18 @@ protected:
 		CProcessPtr			pProcess;
 
 		int					iColor;
+
+		QSet<int>			Bold;
 	};
 
-	virtual STreeNode* MkNode(const QVariant& Id) { return new SProcessNode(Id); }
+	virtual QVariant		NodeData(STreeNode* pNode, int role, int section) const;
 
-	QList<QVariant>  MakeProcPath(const CProcessPtr& pProcess, const QMap<quint64, CProcessPtr>& ProcessList);
+	virtual STreeNode*		MkNode(const QVariant& Id) { return new SProcessNode(Id); }
+		
+	QList<QVariant>			MakeProcPath(const CProcessPtr& pProcess, const QMap<quint64, CProcessPtr>& ProcessList);
+	bool					TestProcPath(const QList<QVariant>& Path, const CProcessPtr& pProcess, const QMap<quint64, CProcessPtr>& ProcessList, int Index = 0);
 	
 	bool					m_bUseDescr;
-
-	QVector<int>			m_Columns;
 
 	virtual QVariant GetDefaultIcon() const;
 };

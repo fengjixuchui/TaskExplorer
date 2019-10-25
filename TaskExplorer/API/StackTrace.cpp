@@ -9,7 +9,7 @@ CStackTrace::CStackTrace(quint64 ProcessId, quint64 ThreadId)
 	m_ThreadId = ThreadId;
 }
 
-void CStackTrace::AddFrame(QString Symbol, quint64 PcAddress, quint64 ReturnAddress, quint64 FrameAddress, quint64 StackAddress, quint64 BStoreAddress, quint64 Params[4], ulong Flags, const QString& FileInfo)
+void CStackTrace::AddFrame(QString Symbol, quint64 PcAddress, quint64 ReturnAddress, quint64 FrameAddress, quint64 StackAddress, quint64 BStoreAddress, quint64 Params[4], quint32 Flags, const QString& FileInfo)
 {
 	SStackFrame Frame;
 	Frame.Symbol = Symbol;
@@ -24,7 +24,8 @@ void CStackTrace::AddFrame(QString Symbol, quint64 PcAddress, quint64 ReturnAddr
 	Frame.Params[3] = Params[3];
 	Frame.Flags = Flags;
 	Frame.FileInfo = FileInfo;
-	m_StackFrames.prepend(Frame);
+	//m_StackFrames.prepend(Frame); // TI - style - current position last
+	m_StackFrames.append(Frame); // regular style - current position first (better for scrolling)
 }
 
 const CStackTrace::SStackFrame& CStackTrace::GetFrame(int index) const

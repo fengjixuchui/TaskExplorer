@@ -2,10 +2,10 @@
 #include <qwidget.h>
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
-#include "..\..\API\SocketInfo.h"
-#include "..\Models\SocketModel.h"
-#include "..\..\Common\SortFilterProxyModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../../API/SocketInfo.h"
+#include "../Models/SocketModel.h"
+#include "../../Common/SortFilterProxyModel.h"
 
 class CSocketsView : public CPanelView
 {
@@ -15,10 +15,13 @@ public:
 	virtual ~CSocketsView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					Refresh();
 
 private slots:
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	void					OnSocketListUpdated(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
 
 	//void					OnMenu(const QPoint &point);
@@ -33,9 +36,23 @@ protected:
 	//virtual QAbstractItemModel* GetModel()				{ return m_pSocketModel; }
 	//virtual QModelIndex			MapToSource(const QModelIndex& Model) { return m_pSortProxy->mapToSource(Model); }
 	
+	enum EView
+	{
+		eNone,
+		eSingle,
+		eMulti
+	};
+
+	virtual void			SwitchView(EView ViewMode);
+
+	EView					m_ViewMode;
+
+	QList<CProcessPtr>		m_Processes;
+	QMultiMap<quint64, CSocketPtr> m_SocketList;
+
 private:
 
-	QHBoxLayout*			m_pMainLayout;
+	QVBoxLayout*			m_pMainLayout;
 
 	QTreeViewEx*			m_pSocketList;
 	CSocketModel*			m_pSocketModel;

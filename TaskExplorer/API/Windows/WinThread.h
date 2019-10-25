@@ -10,7 +10,7 @@ public:
 
 	virtual quint64 GetRawCreateTime() const;
 
-	virtual QString GetName() const						{ return GetStartAddressString(); }
+	virtual QString GetName() const;
 
 	virtual quint64 GetStartAddress() const				{ QReadLocker Locker(&m_Mutex); return m_StartAddress; }
 	virtual QString GetStartAddressString() const;
@@ -20,6 +20,9 @@ public:
 
 	virtual QString GetStateString() const;
 	virtual QString GetPriorityString() const;
+	virtual QString GetBasePriorityString() const;
+	virtual QString GetPagePriorityString() const;
+	virtual QString GetIOPriorityString() const;
 	virtual STATUS SetPriority(long Value);
 	virtual STATUS SetBasePriority(long Value) { return ERR(); }
 	virtual STATUS SetPagePriority(long Value);
@@ -27,7 +30,7 @@ public:
 
 	virtual STATUS SetAffinityMask(quint64 Value);
 
-	virtual STATUS Terminate();
+	virtual STATUS Terminate(bool bForce);
 
 	virtual bool IsSuspended() const;
 	virtual STATUS Suspend();
@@ -38,27 +41,34 @@ public:
 
 	virtual bool IsGuiThread() const					{ QReadLocker Locker(&m_Mutex); return m_IsGuiThread; }
 	virtual bool IsCriticalThread() const				{ QReadLocker Locker(&m_Mutex); return m_IsCritical; }
+	virtual bool HasToken() const						{ QReadLocker Locker(&m_Mutex); return m_HasToken; }
 	virtual STATUS SetCriticalThread(bool bSet, bool bForce = false);
 	virtual STATUS CancelIO();
+	virtual QString GetAppDomain() const;
 
-	virtual QString GetIdealProcessor() const			{ QReadLocker Locker(&m_Mutex); return m_IdealProcessor; }
+	virtual QString GetIdealProcessor() const;
 
 	virtual QString GetTypeString() const;
 
-	virtual void TraceStack();
+	virtual quint64 TraceStack();
 
 	virtual void OpenPermissions();
 
 private slots:
-	void	OnSymbolFromAddress(quint64 ProcessId, quint64 Address, int ResolveLevel, const QString& StartAddressString, const QString& FileName, const QString& SymbolName);
+	void		OnSymbolFromAddress(quint64 ProcessId, quint64 Address, int ResolveLevel, const QString& StartAddressString, const QString& FileName, const QString& SymbolName);
+
+	void		UpdateAppDomain();
+	void		OnAppDomain(int Index);
 
 protected:
 	friend class CWinProcess;
 
-	bool InitStaticData(void* pProcessHandle, struct _SYSTEM_THREAD_INFORMATION* thread);
+	bool InitStaticData(void* ProcessHandle, struct _SYSTEM_THREAD_INFORMATION* thread);
 	bool UpdateDynamicData(struct _SYSTEM_THREAD_INFORMATION* thread, quint64 sysTotalTime, quint64 sysTotalCycleTime);
-	bool UpdateExtendedData();
+	void CloseHandle();
 	void UnInit();
+
+	virtual void SetAppDomain(const QString& AppDomain) { QWriteLocker Locker(&m_Mutex); m_AppDomain = AppDomain; }
 
 	QString		m_ServiceName;
 	QString		m_ThreadName;
@@ -71,7 +81,11 @@ protected:
 
 	bool		m_IsGuiThread;
 	bool		m_IsCritical;
-	QString		m_IdealProcessor;
+	bool		m_HasToken;
+
+	QString		m_AppDomain;
 
 	struct SWinThread*	m;
 };
+
+QString SvcGetClrThreadAppDomain(const QVariantMap& Parameters);

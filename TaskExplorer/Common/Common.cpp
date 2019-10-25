@@ -55,6 +55,39 @@ quint64 GetCurTick()
 	return g_CurTick.Get();
 }
 
+QString UnEscape(QString Text)
+{
+	QString Value;
+	bool bEsc = false;
+	for(int i = 0; i < Text.size(); i++)
+	{
+		QChar Char = Text.at(i);
+		if(bEsc)
+		{
+			switch(Char.unicode())
+			{
+				case L'\\':	Value += L'\\';	break;
+				case L'\'':	Value += L'\'';	break;
+				case L'\"':	Value += L'\"';	break;
+				case L'a':	Value += L'\a';	break;
+				case L'b':	Value += L'\b';	break;
+				case L'f':	Value += L'\f';	break;
+				case L'n':	Value += L'\n';	break;
+				case L'r':	Value += L'\r';	break;
+				case L't':	Value += L'\t';	break;
+				case L'v':	Value += L'\v';	break;
+				default:	Value += Char.unicode();break;
+			}
+			bEsc = false;
+		}
+		else if(Char == L'\\')
+			bEsc = true;
+		else
+			Value += Char;
+	}	
+	return Value;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Other Functions
 // 
@@ -113,52 +146,77 @@ QString FormatSize(quint64 Size, int Precision)
 {
 	double Div;
 	if(Size > (quint64)(Div = 1.0*1024*1024*1024*1024*1024*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "EB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " EB";
 	if(Size > (quint64)(Div = 1.0*1024*1024*1024*1024*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "PB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " PB";
 	if(Size > (quint64)(Div = 1.0*1024*1024*1024*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "TB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " TB";
 	if(Size > (quint64)(Div = 1.0*1024*1024*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "GB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " GB";
 	if(Size > (quint64)(Div = 1.0*1024*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "MB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " MB";
 	if(Size > (quint64)(Div = 1.0*1024))
-		return QString::number(double(Size)/Div, 'f', Precision) + "kB";
+		return QString::number(double(Size)/Div, 'f', Precision) + " KB";
 	return QString::number(double(Size)) + "B";
+}
+
+QString FormatRate(quint64 Size, int Precision)
+{
+	return FormatSize(Size, Precision) + "/s";
 }
 
 QString FormatUnit(quint64 Size, int Precision)
 {
 	double Div;
 	if(Size > (quint64)(Div = 1.0*1000*1000*1000*1024*1000*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "E";
+		return QString::number(double(Size)/Div, 'f', Precision) + " E";
 	if(Size > (quint64)(Div = 1.0*1000*1000*1000*1000*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "P";
+		return QString::number(double(Size)/Div, 'f', Precision) + " P";
 	if(Size > (quint64)(Div = 1.0*1000*1000*1000*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "T";
+		return QString::number(double(Size)/Div, 'f', Precision) + " T";
 	if(Size > (quint64)(Div = 1.0*1000*1000*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "G";
+		return QString::number(double(Size)/Div, 'f', Precision) + " G";
 	if(Size > (quint64)(Div = 1.0*1000*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "M";
+		return QString::number(double(Size)/Div, 'f', Precision) + " M";
 	if(Size > (quint64)(Div = 1.0*1000))
-		return QString::number(double(Size)/Div, 'f', Precision) + "K";
+		return QString::number(double(Size)/Div, 'f', Precision) + " K";
 	return QString::number(double(Size));
 }
 
 
-QString FormatTime(quint64 Time)
+QString FormatTime(quint64 Time, bool ms)
 {
+	int miliseconds = 0;
+	if (ms) {
+		miliseconds = Time % 1000;
+		Time /= 1000;
+	}
 	int seconds = Time % 60;
 	Time /= 60;
 	int minutes = Time % 60;
 	Time /= 60;
 	int hours = Time % 24;
 	int days = Time / 24;
+	if(ms && (minutes == 0) && (hours == 0) && (days == 0))
+		return QString().sprintf("%02d.%04d", seconds, miliseconds);
 	if((hours == 0) && (days == 0))
 		return QString().sprintf("%02d:%02d", minutes, seconds);
 	if (days == 0)
 		return QString().sprintf("%02d:%02d:%02d", hours, minutes, seconds);
 	return QString().sprintf("%dd%02d:%02d:%02d", days, hours, minutes, seconds);
+}
+
+QString	FormatNumber(quint64 Number)
+{
+	QString String = QString::number(Number);
+	for (int i = String.length() - 3; i > 0; i -= 3)
+		String.insert(i, QString::fromWCharArray(L"\u202F")); // L"\u2009"
+	return String;
+}
+
+QString	FormatAddress(quint64 Address, int length)
+{
+	return "0x" + QString::number(Address, 16).rightJustified(length, '0');
 }
 
 bool ReadFromDevice(QIODevice* dev, char* data, int len, int timeout)
@@ -204,17 +262,20 @@ void GrayScale (QImage& Image)
 	}
 }
 
-QAction* MakeAction(QToolBar* pParent, const QString& IconFile, const QString& Text)
+QIcon MakeActionIcon(const QString& IconFile)
 {
-	QAction* pAction = new QAction(Text, pParent);
-	
 	QImage Image(IconFile);
 	QIcon Icon;
 	Icon.addPixmap(QPixmap::fromImage(Image), QIcon::Normal);
 	GrayScale(Image);
 	Icon.addPixmap(QPixmap::fromImage(Image), QIcon::Disabled);
-	pAction->setIcon(Icon);
-	
+	return Icon;
+}
+
+QAction* MakeAction(QToolBar* pParent, const QString& IconFile, const QString& Text)
+{
+	QAction* pAction = new QAction(Text, pParent);
+	pAction->setIcon(MakeActionIcon(IconFile));
 	pParent->addAction(pAction);
 	return pAction;
 }

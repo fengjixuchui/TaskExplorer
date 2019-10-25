@@ -11,6 +11,8 @@ CMemDumper::CMemDumper(QObject* parent)
 
 CMemDumper::~CMemDumper()
 {
+	if(!wait(10*1000))
+		terminate();
 }
 
 CMemDumper* CMemDumper::New()
@@ -18,6 +20,6 @@ CMemDumper* CMemDumper::New()
 #ifdef WIN32
 	return new CWinDumper();
 #else
-	// todo: implement other systems liek Linux
+	// linux-todo:
 #endif // WIN32
 }

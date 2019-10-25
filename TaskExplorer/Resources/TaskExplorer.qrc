@@ -13,5 +13,73 @@
     <qresource prefix="/">
         <file>TaskExplorer.png</file>
         <file>ProcessHacker.png</file>
+        <file>close.png</file>
+    </qresource>
+    <qresource prefix="/WinLogos">
+        <file alias="WinOld">WinLogos/1-4 Old Windows.png</file>
+        <file alias="Win2k">WinLogos/5 Windows 2000.png</file>
+        <file alias="WinXP">WinLogos/5.1 Windows XP.png</file>
+        <file alias="Win6">WinLogos/6 Windows Vista.png</file>
+        <file alias="Win7">WinLogos/7 Windows 7.png</file>
+        <file alias="Win8">WinLogos/8 Windows 8.png</file>
+        <file alias="Win10">WinLogos/10 Windows 10.png</file>
+        <file alias="WinNew">WinLogos/10+Windows New.png</file>
+    </qresource>
+    <qresource prefix="/Actions">
+        <file alias="Settings">Actions/config.png</file>
+        <file alias="Pause">Actions/pause.png</file>
+        <file alias="FreeMem">Actions/clean.png</file>
+        <file alias="Find">Actions/find.png</file>
+        <file alias="MonitorETW">Actions/etw_mon.png</file>
+        <file alias="Refresh">Actions/refresh.png</file>
+        <file alias="SysInfo">Actions/sys_info.png</file>
+        <file alias="Lock">Actions/lock.png</file>
+        <file alias="Shutdown">Actions/shutdown.png</file>
+        <file alias="Users">Actions/users.png</file>
+        <file alias="Services">Actions/services.png</file>
+        <file alias="Connect">Actions/connect.png</file>
+        <file alias="Disconnect">Actions/disconnect.png</file>
+        <file alias="Hibernate">Actions/hibernate.png</file>
+        <file alias="Logoff">Actions/logoff.png</file>
+        <file alias="Reboot">Actions/reboot.png</file>
+        <file alias="HardReboot">Actions/reboot2.png</file>
+        <file alias="HardShutdown">Actions/shutdown2.png</file>
+        <file alias="StandBy">Actions/standby.png</file>
+        <file alias="RebootMenu">Actions/reboot3.png</file>
+        <file alias="HybridShutdown">Actions/shutdown3.png</file>
+        <file alias="Exit">Actions/exit.png</file>
+        <file alias="Login">Actions/login.png</file>
+        <file alias="Run">Actions/run.png</file>
+        <file alias="RunAs">Actions/run_as.png</file>
+        <file alias="RunRoot">Actions/run_root.png</file>
+        <file alias="RunTI">Actions/run_ti.png</file>
+        <file alias="RunUser">Actions/run_user.png</file>
+        <file alias="FindDLL">Actions/find_dll.png</file>
+        <file alias="FindHandle">Actions/find_handle.png</file>
+        <file alias="FindString">Actions/find_string.png</file>
+        <file alias="Shield">Actions/shield.png</file>
+        <file alias="UserInfo">Actions/user_info.png</file>
+        <file alias="SendMsg">Actions/user_msg.png</file>
+        <file alias="User">Actions/user.png</file>
+        <file alias="MonitorFW">Actions/fw_mon.png</file>
+        <file alias="Security">Actions/security.png</file>
+        <file alias="Flush">Actions/flush.png</file>
+        <file alias="Reset">Actions/reset.png</file>
+        <file alias="Expand">Actions/expand.png</file>
+        <file alias="Driver">Actions/driver.png</file>
+    </qresource>
+    <qresource prefix="/NtObjects">
+        <file alias="Device">NtObjects/device16.png</file>
+        <file alias="Dll">NtObjects/dll16.png</file>
+        <file alias="Driver">NtObjects/driver16.png</file>
+        <file alias="Event">NtObjects/event16.png</file>
+        <file alias="Folder">NtObjects/folder16.png</file>
+        <file alias="Key">NtObjects/key16.png</file>
+        <file alias="Link">NtObjects/link16.png</file>
+        <file alias="Mutant">NtObjects/mutant16.png</file>
+        <file alias="Port">NtObjects/port16.png</file>
+        <file alias="Section">NtObjects/section16.png</file>
+        <file alias="Session">NtObjects/session16.png</file>
+        <file alias="Unknown">NtObjects/unknown16.png</file>
     </qresource>
 </RCC>

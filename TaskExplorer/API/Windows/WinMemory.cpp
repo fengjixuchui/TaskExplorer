@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "../../GUI/TaskExplorer.h"
 #include "WinMemory.h"
 #include "WindowsAPI.h"
 #include "WinMemIO.h"
@@ -302,6 +301,6 @@ QIODevice* CWinMemory::MkDevice()
 	if (!IsAllocationBase() && (GetState() & MEM_COMMIT) == 0)
 		return NULL;
 
-	return new CWinMemIO(this);
+	return new CWinMemIO(GetBaseAddress(), GetRegionSize(), GetProcessId());
 }
 

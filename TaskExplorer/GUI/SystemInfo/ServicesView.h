@@ -2,9 +2,9 @@
 #include <qwidget.h>
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
-#include "..\..\API\ServiceInfo.h"
-#include "..\Models\ServiceModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../../API/ServiceInfo.h"
+#include "../Models/ServiceModel.h"
 
 class CServiceModel;
 class QSortFilterProxyModel;
@@ -19,28 +19,31 @@ public:
 
 	//void					OnMenu(const QPoint &point);
 
-#ifdef WIN32
-	void					SetShowKernelServices(bool bShow);
-#endif
-
 public slots:
-	void					Refresh() {}
+	void					Refresh();
 
-	void					ShowServices(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 
 protected:
 	virtual void				OnMenu(const QPoint& Point);
 	virtual QTreeView*			GetView()	{ return m_pServiceList; }
-	virtual QAbstractItemModel* GetModel()	{ return m_pServiceModel; }
+	virtual QAbstractItemModel* GetModel()	{ return m_pSortProxy; }
+
+	bool					m_bAll;
+
+	QMap<QString, CServicePtr> m_ServiceList;
 
 private slots:
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	void					OnServiceListUpdated(QSet<QString> Added, QSet<QString> Changed, QSet<QString> Removed);
 
 	void					OnServiceAction();
 	void					OnDoubleClicked(const QModelIndex& Index);
 
 private:
-	QHBoxLayout*			m_pMainLayout;
+	QVBoxLayout*			m_pMainLayout;
 
 	QTreeViewEx*			m_pServiceList;
 	CServiceModel*			m_pServiceModel;
@@ -55,6 +58,7 @@ private:
 	QAction*				m_pMenuDelete;
 #ifdef WIN32
 	QAction*				m_pMenuOpenKey;
+	QAction*				m_pMenuKernelServices;
 #endif
 };
 

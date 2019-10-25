@@ -14,9 +14,14 @@ public:
 	CWinSvcWindow(QSharedPointer<CWinService> pService, QWidget *parent = Q_NULLPTR);
 	~CWinSvcWindow();
 
+signals:
+	void ServicesChanged();
+
 private slots:
 	void accept();
 	void reject();
+
+	void OnTab(int tabIndex);
 
 	void OnBrowse();
 	void OnShowPW(int state);
@@ -45,27 +50,48 @@ private slots:
 protected:
 	void closeEvent(QCloseEvent *e);
 
+	void LoadGeneral();
+	void SaveGeneral();
+	void LoadRecovery();
+	void SaveRecovery();
+	//void LoadDependencies();
+	//void SaveDependencies();
+	void LoadDependants();
+	//void SaveDependants();
+	void LoadTriggers();
+	void SaveTriggers();
+	void LoadOther();
+	void SaveOther();
+
 	QSharedPointer<CWinService>		m_pService;
 
 	bool							m_GeneralChanged;
 	bool							m_OldDelayedStart;
+	QStringList						m_OldDependencies;
 
+	bool							m_RecoveryValid;
 	bool							m_RecoveryChanged;
 	int								m_NumberOfActions;
 	bool							m_EnableFlagCheckBox;
 	quint64							m_RebootAfter;
 	QString							m_RebootMessage;
 
+	bool							m_DependantsValid;
+
+	bool							m_TriggerValid;
 	QVector<void*>					m_TriggerInfos;
 
 	bool							m_TriggersChanged;
 	int								m_InitialNumberOfTriggers;
 
+	bool							m_OtherValid;
 	bool							m_PreshutdownTimeoutValid;
 	bool							m_RequiredPrivilegesValid;
 	bool							m_SidTypeValid;
 	bool							m_LaunchProtectedValid;
 	int								m_OriginalLaunchProtected;
+
+	bool							m_OtherChanged;
 
 private:
 	void							AddTrigger(void* pInfo);

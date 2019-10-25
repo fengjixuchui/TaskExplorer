@@ -3,11 +3,11 @@
 #include "../../Common/TreeWidgetEx.h"
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
-#include "..\Models\HandleModel.h"
-#include "..\..\Common\SortFilterProxyModel.h"
+#include "../../API/ProcessInfo.h"
+#include "../Models/HandleModel.h"
+#include "../../Common/SortFilterProxyModel.h"
 
-class CHandleFilterModel: public CSortFilterProxyModel
+/*class CHandleFilterModel: public CSortFilterProxyModel
 {
 public:
 	CHandleFilterModel(bool bAlternate, QObject* parrent = 0) : CSortFilterProxyModel(bAlternate, parrent) 
@@ -47,7 +47,7 @@ public:
 				if (m_bHideEtwReg && Type == "EtwRegistration")
 					return false;
 
-				if (!m_ShowType.isEmpty() && Type != m_ShowType)
+				if (!m_ShowType.isEmpty() && !Type.contains(m_ShowType))
 					return false;
 			}
 		}
@@ -60,25 +60,30 @@ protected:
 	QString m_ShowType;
 	bool m_bHideUnnmed;
 	bool m_bHideEtwReg;
-};
+};*/
 
 class CHandlesView : public CPanelView
 {
 	Q_OBJECT
 public:
-	CHandlesView(bool bAll = false, QWidget *parent = 0);
+	CHandlesView(int iAll = 0, QWidget *parent = 0);
 	virtual ~CHandlesView();
 
 public slots:
-	void					ShowProcess(const CProcessPtr& pProcess);
+	void					ShowProcesses(const QList<CProcessPtr>& Processes);
 	void					Refresh();
+	void					ShowHandles(const QMap<quint64, CHandlePtr>& Handles);
 
 	void					UpdateFilter();
 	void					UpdateFilter(const QString & filter);
 	//void					OnShowDetails();
 
 private slots:
+	void					OnResetColumns();
+	void					OnColumnsChanged();
+
 	void					ShowHandles(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
+	void					ShowOpenFiles(QSet<quint64> Added, QSet<quint64> Changed, QSet<quint64> Removed);
 	void					OnItemSelected(const QModelIndex &current);
 	void					OnDoubleClicked();
 
@@ -94,8 +99,22 @@ protected:
 	//virtual QAbstractItemModel* GetModel()				{ return m_pHandleModel; }
 	//virtual QModelIndex			MapToSource(const QModelIndex& Model) { return m_pSortProxy->mapToSource(Model); }
 
-	bool					m_ShowAllFiles;
-	CProcessPtr				m_pCurProcess;
+	enum EView
+	{
+		eNone,
+		eSingle,
+		eMulti
+	};
+
+	virtual void			SwitchView(EView ViewMode);
+
+	EView					m_ViewMode;
+
+	int						m_ShowAllFiles;
+	QList<CProcessPtr>		m_Processes;
+	int						m_PendingUpdates;
+
+	QMap<quint64, CHandlePtr> m_Handles;
 
 private:
 	QVBoxLayout*			m_pMainLayout;
@@ -109,11 +128,12 @@ private:
 
 	QTreeViewEx*			m_pHandleList;
 	CHandleModel*			m_pHandleModel;
-	CHandleFilterModel*		m_pSortProxy;
+	//CHandleFilterModel*		m_pSortProxy;
+	CSortFilterProxyModel*	m_pSortProxy;
 
 	QSplitter*				m_pSplitter;
 
-	CPanelWidget<QTreeWidgetEx>* m_pHandleDetails;
+	CPanelWidgetEx* m_pHandleDetails;
 
 	//QMenu*					m_pMenu;
 	QAction*				m_pClose;

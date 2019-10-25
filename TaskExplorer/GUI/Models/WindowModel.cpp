@@ -10,55 +10,72 @@
 CWindowModel::CWindowModel(QObject *parent)
 :CTreeItemModel(parent)
 {
+	m_Root = MkNode(QVariant());
+
+	m_bExtThreadId = false;
 }
 
 CWindowModel::~CWindowModel()
 {
 }
 
-QList<QVariant> CWindowModel::MakeWndPath(const CWndPtr& pWindow, const QMap<quint64, CWndPtr>& ModuleList)
+QList<QVariant> CWindowModel::MakeWndPath(const CWndPtr& pWindow, const QHash<quint64, CWndPtr>& WindowList)
 {
 	quint64 ParentID = pWindow->GetParentWnd();
+	CWndPtr pParent = WindowList.value(ParentID);
 
-	QList<QVariant> list;
-	if (ParentID != pWindow->GetHWnd())
+	QList<QVariant> Path;
+	if (!pParent.isNull() && ParentID != pWindow->GetHWnd())
 	{
-		CWndPtr pParent = ModuleList.value(ParentID);
-		if (!pParent.isNull())
-		{
-			list = MakeWndPath(pParent, ModuleList);
-			list.append(ParentID);
-		}
+		Path = MakeWndPath(pParent, WindowList);
+		Path.append(ParentID);
 	}
-	return list;
+	return Path;
 }
 
-void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
+bool CWindowModel::TestWndPath(const QList<QVariant>& Path, const CWndPtr& pWindow, const QHash<quint64, CWndPtr>& WindowList, int Index)
 {
-	QMap<QList<QVariant>, QList<STreeNode*> > New;
-	QMap<QVariant, STreeNode*> Old = m_Map;
+	quint64 ParentID = pWindow->GetParentWnd();
+	CWndPtr pParent = WindowList.value(ParentID);
 
-	foreach (const CWndPtr& pWindow, ModuleList)
+	if (!pParent.isNull() && ParentID != pWindow->GetHWnd())
 	{
-		QVariant ID = pWindow->GetHWnd();
+		if(Index >= Path.size() || Path[Path.size() - Index - 1] != ParentID)
+			return false;
+
+		return TestWndPath(Path, pParent, WindowList, Index + 1);
+	}
+
+	return Path.size() == Index;
+}
+
+QSet<quint64> CWindowModel::Sync(const QHash<quint64, CWndPtr>& WindowList)
+{
+	QSet<quint64> Added;
+	QMap<QList<QVariant>, QList<STreeNode*> > New;
+	QHash<QVariant, STreeNode*> Old = m_Map;
+
+	foreach (const CWndPtr& pWindow, WindowList)
+	{
+		quint64 ID = pWindow->GetHWnd();
 
 		QModelIndex Index;
-		QList<QVariant> Path;
-		if(m_bTree)
-			Path = MakeWndPath(pWindow, ModuleList);
 		
-		SWindowNode* pNode = static_cast<SWindowNode*>(Old.value(ID));
-		if(!pNode || pNode->Path != Path)
+		QHash<QVariant, STreeNode*>::iterator I = Old.find(ID);
+		SWindowNode* pNode = I != Old.end() ? static_cast<SWindowNode*>(I.value()) : NULL;
+		if(!pNode || (m_bTree ? !TestWndPath(pNode->Path, pWindow, WindowList) : !pNode->Path.isEmpty()))
 		{
 			pNode = static_cast<SWindowNode*>(MkNode(ID));
 			pNode->Values.resize(columnCount());
-			pNode->Path = Path;
+			if(m_bTree)
+				pNode->Path = MakeWndPath(pWindow, WindowList);
 			pNode->pWindow = pWindow;
-			New[Path].append(pNode);
+			New[pNode->Path].append(pNode);
+			Added.insert(ID);
 		}
 		else
 		{
-			Old[ID] = NULL;
+			I.value() = NULL;
 			Index = Find(m_Root, pNode);
 		}
 
@@ -70,7 +87,7 @@ void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
 		int Changed = 0;
 
 		// Note: icons are loaded asynchroniusly
-		/*if (m_bUseIcons && !pNode->Icon.isValid())
+		/*if (m_bUseIcons && !pNode->Icon.isValid() && m_Columns.contains(eHandle))
 		{
 			QPixmap Icon = pNode->pWindow->GetFileIcon();
 			if (!Icon.isNull()) {
@@ -89,8 +106,11 @@ void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
 		CWinWnd* pWinWnd = qobject_cast<CWinWnd*>(pWindow.data());
 #endif
 
-		for(int section = eHandle; section < columnCount(); section++)
+		for(int section = 0; section < columnCount(); section++)
 		{
+			if (!m_Columns.contains(section))
+				continue; // ignore columns which are hidden
+
 			QVariant Value;
 			switch(section)
 			{
@@ -98,8 +118,8 @@ void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
 #ifdef WIN32
 				case eClass:		Value = pWinWnd->GetWindowClass(); break;
 #endif
-				case eText:			Value = pWinWnd->GetWindowTitle(); break;
-				case eThread:		Value = pWinWnd->GetThreadId(); break;
+                case eText:			Value = pWindow->GetWindowTitle(); break;
+                case eThread:		Value = pWindow->GetThreadId(); break;
 #ifdef WIN32
 				case eModule:		Value = pWinWnd->GetModuleString(); break;
 #endif
@@ -115,8 +135,11 @@ void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
 
 				switch (section)
 				{
+					case eThread:		if (m_bExtThreadId)
+											ColValue.Formated = tr("%1 (%2): %3").arg(pWindow->GetProcessName()).arg(pWindow->GetProcessId()).arg(pWindow->GetThreadId());
+										break;
 					case eHandle:		ColValue.Formated = "0x" + QString::number(Value.toULongLong(), 16); break;
-					case eThread:		break; // todo
+					//case eThread:		ColValue.Formated = "0x" + QString::number(Value.toULongLong(), 16); break;
 				}
 			}
 
@@ -136,6 +159,8 @@ void CWindowModel::Sync(const QMap<quint64, CWndPtr>& ModuleList)
 	}
 
 	CTreeItemModel::Sync(New, Old);
+
+	return Added;
 }
 
 CWndPtr CWindowModel::GetWindow(const QModelIndex &index) const

@@ -1,12 +1,14 @@
 #pragma once
 #include <qobject.h>
-#include "../Common/FlexError.h"
+#include "../../Common/FlexError.h"
 #include "../ProcessInfo.h"
 #include "../AbstractInfo.h"
 
 #define VIRTUALIZATION_NOT_ALLOWED	0x00
 #define VIRTUALIZATION_ALLOWED		0x01
 #define VIRTUALIZATION_ENABLED		0x02
+
+#undef GetUserName
 
 class CWinToken : public CAbstractInfo
 {
@@ -16,18 +18,21 @@ public:
 	virtual ~CWinToken();
 
 	static CWinToken* NewSystemToken();
+	static CWinToken* TokenFromProcess(void* QueryHandle);
 	static CWinToken* TokenFromHandle(quint64 ProcessId, quint64 HandleId);
+	static CWinToken* TokenFromThread(quint64 ThreadId);
 
 	virtual QString			GetUserName() const { QReadLocker Locker(&m_Mutex); return m_UserName; }
 	virtual QByteArray		GetUserSid() const { QReadLocker Locker(&m_Mutex); return m_UserSid; }
 	virtual QString			GetSidString() const { QReadLocker Locker(&m_Mutex); return m_SidString; }
 	virtual bool			IsAppContainer() const { QReadLocker Locker(&m_Mutex); return m_IsAppContainer; }
-	virtual ulong			GetSessionId() const { QReadLocker Locker(&m_Mutex); return m_SessionId; }
+	virtual quint32			GetSessionId() const { QReadLocker Locker(&m_Mutex); return m_SessionId; }
 	virtual QString			GetOwnerName() const { QReadLocker Locker(&m_Mutex); return m_OwnerName; }
 	virtual QByteArray		GetOwnerSid() const { QReadLocker Locker(&m_Mutex); return m_OwnerSid; }
 	virtual QString			GetGroupName() const { QReadLocker Locker(&m_Mutex); return m_GroupName; }
 	virtual QByteArray		GetGroupSid() const { QReadLocker Locker(&m_Mutex); return m_GroupSid; }
 
+	virtual bool			IsElevated() const { QReadLocker Locker(&m_Mutex); return m_Elevated; }
 	virtual int				GetElevationType() const { QReadLocker Locker(&m_Mutex); return m_ElevationType; }
 	virtual quint32			GetIntegrityLevel() const { QReadLocker Locker(&m_Mutex); return m_IntegrityLevel; }
 	virtual STATUS			SetIntegrityLevel(quint32 IntegrityLevel) const;
@@ -184,25 +189,35 @@ public:
 
 	virtual QMap<QString, SAttribute> GetAttributes();
 
-	static QString CWinToken::GetSecurityAttributeTypeString(quint16 Type);
-	static QString CWinToken::GetSecurityAttributeFlagsString(quint32 Flags);
+	enum EDangerousFlags
+	{
+		eNoWriteUpDisabled,
+		eSandboxInertEnabled,
+		eUIAccessEnabled,
+	};
+
+	virtual QSet<EDangerousFlags> GetDangerousFlags() const { QReadLocker Locker(&m_Mutex); return m_DangerousFlags; }
+
+    static QString GetSecurityAttributeTypeString(quint16 Type);
+    static QString GetSecurityAttributeFlagsString(quint32 Flags);
 
 	enum EQueryType
 	{
 		eProcess = 0,
 		eLinked,
-		eHandle
+		eHandle,
+		eThread
 	};
 
 public slots:
-	virtual void OnSidResolved(int Index);
+	virtual void OnSidResolved(const QByteArray& SID, const QString& Name);
 
 protected:
 	friend class CWinProcess;
 	friend class CTokenView;
 
-	bool InitStaticData(void* QueryHandle, EQueryType Type = eProcess);
-	bool UpdateDynamicData();
+	bool InitStaticData();
+	bool UpdateDynamicData(bool MonitorChange = true, bool IsOrWasRunning = false);
 	bool UpdateExtendedData();
 
 	QString		m_UserName;
@@ -213,17 +228,29 @@ protected:
 	QByteArray	m_OwnerSid;
 	QString		m_GroupName;
 	QByteArray	m_GroupSid;
-	ulong		m_SessionId;
+	quint32		m_SessionId;
 
+	bool		m_Elevated;
 	int			m_ElevationType;
 	quint32		m_IntegrityLevel;
 	QString		m_IntegrityString;
 	int			m_Virtualization;
 
+	enum ETokenState
+	{
+		eNotInitialized = 0,
+		eNotYetLocked,
+		eInitialized,
+		eHasChanged
+	}			m_TokenState;
+
 	QMap<QByteArray, SGroup> m_Groups;
 	QMap<QString, SPrivilege> m_Privileges;
-
+	QSet<EDangerousFlags> m_DangerousFlags;
+	
 private:
+	void SetDangerousFlag(EDangerousFlags Flag, bool Set);
+
 	struct SWinToken*		m;
 };
 

@@ -3,7 +3,9 @@
 #include "../../Common/TreeViewEx.h"
 #include "../../Common/TreeWidgetEx.h"
 #include "../../Common/PanelView.h"
-#include "..\..\API\ProcessInfo.h"
+#include "../../API/ProcessInfo.h"
+
+class CFinder;
 
 class CStackView : public CPanelView
 {
@@ -14,9 +16,12 @@ public:
 
 public slots:
 	void					Clear()			{ m_pStackList->clear(); }
+	void					Invalidate();
 	void					ShowStack(const CStackTracePtr& StackTrace);
 
 	//void					OnMenu(const QPoint &point);
+
+	void					SetFilter(const QRegExp& Exp, bool bHighLight = false, int Col = -1); // -1 = any
 
 protected:
 	//virtual void				OnMenu(const QPoint& Point);
@@ -27,7 +32,7 @@ private:
 	enum EStackColumns
 	{
 		eStack = 0,
-		eName,
+		eSymbol,
 		eStackAddress,
 		eFrameAddress,
 		eControlAddress,
@@ -39,7 +44,10 @@ private:
 
 	QVBoxLayout*			m_pMainLayout;
 
+	bool					m_bIsInvalid;
 	QTreeWidgetEx*			m_pStackList;
+
+	CFinder*				m_pFinder;
 
 	//QMenu*					m_pMenu;
 };

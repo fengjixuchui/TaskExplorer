@@ -1,5 +1,5 @@
 /*
- * Process Hacker -
+ * Task Explorer -
  *   qt wrapper and support functions based on hndlprv.c
  *
  * Copyright (C) 2010-2015 wj32
@@ -23,10 +23,10 @@
  */
 
 #include "stdafx.h"
-#include "../../GUI/TaskExplorer.h"
 #include "WinHandle.h"
 #include "ProcessHacker.h"
 #include "WindowsAPI.h"
+#include "../../Common/Settings.h"
 
 CWinHandle::CWinHandle(QObject *parent) 
 	: CHandleInfo(parent) 
@@ -42,12 +42,19 @@ CWinHandle::~CWinHandle()
 {
 }
 
+quint64 CWinHandle::MakeID(quint64 HandleValue, quint64 UniqueProcessId)
+{
+	quint64 HandleID = HandleValue;
+	HandleID ^= (UniqueProcessId << 32);
+	HandleID ^= (UniqueProcessId >> 32);
+	return HandleID;
+}
+
 bool CWinHandle::InitStaticData(struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX* handle, quint64 TimeStamp)
 {
 	QWriteLocker Locker(&m_Mutex);
 
-	m_ProcessId = (quint64)handle->UniqueProcessId;
-
+	m_ProcessId = handle->UniqueProcessId;
 	m_HandleId = handle->HandleValue;
 	m_Object = (quint64)handle->Object;
 	m_Attributes = handle->HandleAttributes;
@@ -55,6 +62,7 @@ bool CWinHandle::InitStaticData(struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX* handl
 	m_TypeIndex = handle->ObjectTypeIndex;
 
 	m_CreateTimeStamp = TimeStamp;
+	m_RemoveTimeStamp = 0; // handles can be reused
 
 	return true;
 }
@@ -135,7 +143,9 @@ bool CWinHandle::UpdateDynamicData(struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX* ha
 	if (m_TypeName == "File")
     {
         HANDLE fileHandle;
-        if (NT_SUCCESS(NtDuplicateObject((HANDLE)ProcessHandle, (HANDLE)m_HandleId, NtCurrentProcess(), &fileHandle, MAXIMUM_ALLOWED, 0, 0)))
+		NTSTATUS status = NtDuplicateObject((HANDLE)ProcessHandle, (HANDLE)m_HandleId, NtCurrentProcess(), &fileHandle, MAXIMUM_ALLOWED, 0, 0);
+
+        if (NT_SUCCESS(status))
         {
 			QString SubTypeName;
 			quint64 FileSize = 0;
@@ -178,10 +188,8 @@ bool CWinHandle::UpdateDynamicData(struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX* ha
                 }
             }
 
-			// NOTE: NtQueryInformationFile for '\Device\ConDrv\CurrentIn' causes a deadlock but
-            // we can query other '\Device\ConDrv' console handles. NtQueryInformationFile also
-            // causes a deadlock for some types of named pipes and only on Win10 (dmex)
-            if (!isPipeHandle && !isConsoleHandle)
+			// NOTE: NtQueryInformationFile may hang on no file types see commetn in GetHandleInfo()
+            if (isFileOrDirectory)
             {
                 if (NT_SUCCESS(NtQueryInformationFile(fileHandle, &isb, &fileStandardInfo, sizeof(FILE_STANDARD_INFORMATION), FileStandardInformation)))
                 {
@@ -216,7 +224,7 @@ bool CWinHandle::UpdateDynamicData(struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX* ha
             NtClose(fileHandle);
         }
     }
-	if(m_TypeName == "Section")
+	else if(m_TypeName == "Section")
 	{
 		HANDLE sectionHandle;
 		NTSTATUS status = NtDuplicateObject((HANDLE)ProcessHandle, (HANDLE)m_HandleId, NtCurrentProcess(), &sectionHandle, SECTION_QUERY | SECTION_MAP_READ, 0, 0 );
@@ -306,7 +314,7 @@ NTSTATUS PhEnumHandlesGeneric(
 		*Handles = convertedHandles;
 		*FilterNeeded = FALSE;
 	}
-	else if (WindowsVersion >= WINDOWS_8 /*&& PhGetIntegerSetting(L"EnableHandleSnapshot")*/) // ToDo: add settings
+	else if (WindowsVersion >= WINDOWS_8 && theConf->GetBool("Options/EnableHandleSnapshot", true))
 	{
 		PPROCESS_HANDLE_SNAPSHOT_INFORMATION handles;
 		PSYSTEM_HANDLE_INFORMATION_EX convertedHandles;
@@ -365,7 +373,7 @@ QString CWinHandle::GetAttributesString() const
 	return "";
 }
 
-STATUS CWinHandle::SetAttribute(ulong Attribute, bool bSet)
+STATUS CWinHandle::SetAttribute(quint32 Attribute, bool bSet)
 {
 	QWriteLocker Locker(&m_Mutex);
 
@@ -418,7 +426,6 @@ STATUS CWinHandle::SetInherited(bool bSet)
 {
 	return SetAttribute(OBJ_INHERIT, bSet);
 }
-
 
 QString CWinHandle::GetFileShareAccessString() const
 {
@@ -477,7 +484,7 @@ PH_ACCESS_ENTRY FileModeAccessEntries[6] =
     { L"FILE_SYNCHRONOUS_IO_NONALERT", FILE_SYNCHRONOUS_IO_NONALERT, FALSE, FALSE, L"Synchronous non-alert" },
 };
 
-QString CWinHandle::GetFileAccessMode(ulong Mode)
+QString CWinHandle::GetFileAccessMode(quint32 Mode)
 {
 	// Since FILE_MODE_INFORMATION has no flag for asynchronous I/O we should use our own flag and set
 	// it only if none of synchronous flags are present. That's why we need PhFileModeUpdAsyncFlag.
@@ -486,7 +493,7 @@ QString CWinHandle::GetFileAccessMode(ulong Mode)
 	return QString("0x%1 (%2)").arg(Mode, 0, 16).arg(CastPhString(fileModeAccessStr));
 }
 
-QString CWinHandle::GetSectionType(ulong Attribs)
+QString CWinHandle::GetSectionType(quint32 Attribs)
 {
     if (Attribs & SEC_COMMIT)
         return tr("Commit");
@@ -498,6 +505,16 @@ QString CWinHandle::GetSectionType(ulong Attribs)
         return tr("Reserve");
 	return tr("Unknown");
 };
+
+VOID PhLoadSymbolProviderOptions(_Inout_ PPH_SYMBOL_PROVIDER SymbolProvider);
+
+BOOLEAN NTAPI EnumGenericModulesCallback(_In_ PPH_MODULE_INFO Module, _In_opt_ PVOID Context)
+{
+    if (Module->Type == PH_MODULE_TYPE_MODULE || Module->Type == PH_MODULE_TYPE_WOW64_MODULE)
+        PhLoadModuleSymbolProvider((PPH_SYMBOL_PROVIDER)Context, Module->FileName->Buffer, (ULONG64)Module->BaseAddress, Module->Size);
+    return TRUE;
+}
+
 
 CWinHandle::SHandleInfo CWinHandle::GetHandleInfo() const
 {
@@ -529,7 +546,7 @@ CWinHandle::SHandleInfo CWinHandle::GetHandleInfo() const
 			if (NT_SUCCESS(NtAlpcQueryInformation(alpcPortHandle, AlpcBasicInformation, &alpcInfo, sizeof(ALPC_BASIC_INFORMATION), NULL)))
 			{
 				HandleInfo.Port.SeqNumber = (quint64)alpcInfo.SequenceNo;
-				HandleInfo.Port.Context = (quint64)alpcInfo.PortContext; // L"0x%Ix"
+				HandleInfo.Port.Context = (quint64)alpcInfo.PortContext;
 			}
 
 			NtClose(alpcPortHandle);
@@ -595,7 +612,8 @@ CWinHandle::SHandleInfo CWinHandle::GetHandleInfo() const
 				HandleInfo.File.Mode = fileModeInfo.Mode;
 			}
 
-			if (!isConsoleHandle)
+			// NOTE: NtQueryInformationFile can hand on windows 7 at \Device\VolMgrControl 
+			if (isFileOrDirectory)
 			{
 				if (NT_SUCCESS(NtQueryInformationFile(fileHandle, &isb, &fileStandardInfo, sizeof(FILE_STANDARD_INFORMATION), FileStandardInformation)))
 				{
@@ -781,8 +799,7 @@ CWinHandle::SHandleInfo CWinHandle::GetHandleInfo() const
                 {
                     PhEnumGenericModules(basicInfo.ProcessId, symbolProvider->ProcessHandle, 0, EnumGenericModulesCallback, symbolProvider);
 
-                    symbol = PhGetSymbolFromAddress(symbolProvider, (ULONG64)basicInfo.StartRoutine,
-                        NULL, NULL, NULL, NULL);
+                    symbol = PhGetSymbolFromAddress(symbolProvider, (ULONG64)basicInfo.StartRoutine, NULL, NULL, NULL, NULL);
                 }
 
                 PhDereferenceObject(symbolProvider);
@@ -826,8 +843,6 @@ STATUS CWinHandle::Close(bool bForce)
 			if (WindowsVersion >= WINDOWS_10)
 			{
 				BOOLEAN breakOnTermination;
-				PROCESS_MITIGATION_POLICY_INFORMATION policyInfo;
-
 				if (NT_SUCCESS(PhGetProcessBreakOnTermination(processHandle, &breakOnTermination)))
 				{
 					if (breakOnTermination)
@@ -836,9 +851,9 @@ STATUS CWinHandle::Close(bool bForce)
 					}
 				}
 
+				PROCESS_MITIGATION_POLICY_INFORMATION policyInfo;
 				policyInfo.Policy = ProcessStrictHandleCheckPolicy;
 				policyInfo.StrictHandleCheckPolicy.Flags = 0;
-
 				if (NT_SUCCESS(NtQueryInformationProcess(processHandle, ProcessMitigationPolicy, &policyInfo, sizeof(PROCESS_MITIGATION_POLICY_INFORMATION), NULL)))
 				{
 					if (policyInfo.StrictHandleCheckPolicy.Flags != 0)
@@ -850,6 +865,7 @@ STATUS CWinHandle::Close(bool bForce)
 
 			if (critical && strict)
 			{
+				NtClose(processHandle);
 				return ERR(tr("You are about to close one or more handles for a critical process with strict handle checks enabled. This will shut down the operating system immediately!"), ERROR_CONFIRM);
 			}
 		}
@@ -960,23 +976,24 @@ STATUS CWinHandle::DoHandleAction(EHandleAction Action)
 	return OK;
 }
 
-static NTSTATUS PhpDuplicateHandleFromProcess(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAccess,_In_opt_ PVOID Context)
+NTSTATUS NTAPI CWinHandle__DuplicateHandle(_Out_ PHANDLE Handle, _In_ ACCESS_MASK DesiredAccess,_In_opt_ PVOID Context)
 {
 	QPair<HANDLE, HANDLE>* pPair = (QPair<HANDLE, HANDLE>*)Context;
 	return PhpDuplicateHandleFromProcess(Handle, DesiredAccess, pPair->first, pPair->second);
 }
 
-static NTSTATUS PhpCleanupHandleFromProcess(_In_opt_ PVOID Context)
+NTSTATUS NTAPI CWinHandle__cbPermissionsClosed(_In_opt_ PVOID Context)
 {
 	QPair<HANDLE, HANDLE>* pPair = (QPair<HANDLE, HANDLE>*)Context;
 	delete pPair;
-	return 1;
+
+	return STATUS_SUCCESS;
 }
 
 void CWinHandle::OpenPermissions()
 {
-	QWriteLocker Locker(&m_Mutex); 
-
+	QReadLocker Locker(&m_Mutex); 
 	QPair<HANDLE, HANDLE>* pPair = new QPair<HANDLE, HANDLE>((HANDLE)m_ProcessId, (HANDLE)m_HandleId);
-    PhEditSecurity(NULL, (wchar_t*)m_FileName.toStdWString().c_str(), L"Handle", (PPH_OPEN_OBJECT)PhpDuplicateHandleFromProcess, (PPH_CLOSE_OBJECT)PhpCleanupHandleFromProcess, pPair);
+	Locker.unlock();
+    PhEditSecurity(NULL, (wchar_t*)m_FileName.toStdWString().c_str(), L"Handle", CWinHandle__DuplicateHandle, CWinHandle__cbPermissionsClosed, pPair);
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include <qwidget.h>
 #include "Common/ListItemModel.h"
-#include "..\..\API\ThreadInfo.h"
+#include "../../API/ThreadInfo.h"
 
 class CThreadModel : public CListItemModel
 {
@@ -13,6 +13,8 @@ public:
 
 	void			Sync(QMap<quint64, CThreadPtr> ThreadList);
 
+	void			SetExtThreadId(bool bSet) { m_bExtThreadId = bSet; }
+
 	CThreadPtr		GetThread(const QModelIndex &index) const;
 
     int				columnCount(const QModelIndex &parent = QModelIndex()) const;
@@ -23,12 +25,8 @@ public:
 		eThread = 0,
 		eCPU,
 		eCPU_History,
-		eCyclesDelta,
 #ifdef WIN32
 		eStartAddress,
-#endif
-		ePriority,
-#ifdef WIN32
 		eService,
 		eName,
 		eType,
@@ -38,16 +36,21 @@ public:
 		eStartModule,
 #endif
 		eContextSwitches,
+		eContextSwitchesDelta,
+		ePriority,
 		eBasePriority,
 		ePagePriority,
 		eIOPriority,
 		eCycles,
+		eCyclesDelta,
 		eState,
 		eKernelTime,
 		eUserTime,
 #ifdef WIN32
 		eIdealProcessor,
+		eHasToken,
 		eCritical,
+		eAppDomain,
 #endif
 		eCount
 	};
@@ -62,5 +65,9 @@ protected:
 		int					iColor;
 	};
 
+	bool m_bExtThreadId;
+
 	virtual SListNode* MkNode(const QVariant& Id) { return new SThreadNode(Id); }
+
+	virtual QVariant GetDefaultIcon() const;
 };

@@ -1,8 +1,8 @@
 #pragma once
 #include <qwidget.h>
-#include "../../Common/PanelView.h"
+#include "../Common/PanelView.h"
 
-#include "../../API/AbstractTask.h"
+#include "../API/AbstractTask.h"
 
 class CTaskView : public CPanelView
 {
@@ -17,8 +17,6 @@ private slots:
 	void					OnAffinity();
 
 	void					OnPriority();
-
-	void					OnPermissions();
 
 protected:
 	virtual QList<CTaskPtr>	GetSellectedTasks() = 0;
@@ -42,8 +40,6 @@ protected:
 	QAction*				m_pTerminate;
 	QAction*				m_pSuspend;
 	QAction*				m_pResume;
-
-	QAction*				m_pPermissions;
 
 	// Priority Items
 	QAction*				m_pAffinity;
