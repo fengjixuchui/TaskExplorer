@@ -9,8 +9,8 @@
 #include "Common/FlexError.h"
 
 #define VERSION_MJR		1
-#define VERSION_MIN 	1
-#define VERSION_REV 	0
+#define VERSION_MIN 	2
+#define VERSION_REV 	1
 #define VERSION_UPD 	0
 
 class CGraphBar;
@@ -42,6 +42,9 @@ public:
 		ePlotFront,
 		ePlotGrid,
 
+		eGridColor,
+		eBackground,
+
 		eAdded,
 		eDangerous,
 		eToBeRemoved,
@@ -49,6 +52,7 @@ public:
 		eUser,
 		eService, // daemon
 #ifdef WIN32
+		eSandBoxed,
 		eJob,
 		ePico,
 		eImmersive,
@@ -64,8 +68,32 @@ public:
 		eExecutable,
 		eColorCount
 	};
-	static QColor		GetColor(int Color);
+
+	struct SColor
+	{
+		SColor() : Enabled(false) {}
+		SColor(const QString& name, const QString& description, const QString& default)
+		{
+			Name = name;
+			Description = description;
+			Default = default;
+			Value = QColor(default);
+			Enabled = false;
+		}
+
+		QString Name;
+		QString Description;
+		QString Default;
+		QColor	Value;
+		bool	Enabled;
+	};
+
+	QColor				GetColor(int Color);
 	static QColor		GetListColor(int Color);
+	static bool			UseListColor(int Color);
+	void				InitColors();
+	void				ReloadColors();
+	QList<SColor>		GetAllColors() { return m_Colors.values(); }
 
 	static int			GetGraphLimit(bool bLong = false);
 
@@ -79,6 +107,8 @@ signals:
 
 public slots:
 	void				UpdateAll();
+
+	void				RefreshAll();
 
 	void				UpdateStatus();
 
@@ -95,6 +125,8 @@ protected:
 
 	QString				m_DefaultStyle;
 	QPalette			m_DefaultPalett;
+
+	QMap<EColor, SColor> m_Colors;
 
 private slots:	
 	void				ApplyOptions();
@@ -136,6 +168,7 @@ private slots:
 	void				OnCreateService();
 	void				OnReloadService();
 	void				OnSCMPermissions();
+	void				OnPersistenceOptions();
 	void				OnSecurityExplorer();
 	void				OnFreeMemory();
 	void				OnMonitorETW();
@@ -216,6 +249,7 @@ private:
 	QAction*			m_pMenuPauseRefresh;
 	QAction*			m_pMenuRefreshNow;
 	QAction*			m_pMenuResetAll;
+	QAction*			m_pMenuShowTree;
 	QAction*			m_pMenuExpandAll;
 
 	QMenu*				m_pMenuFind;
@@ -245,6 +279,7 @@ private:
 	QAction*			m_pMenuFreePriority0;
 	QAction*			m_pMenuCombinePages;
 #endif
+	QAction*			m_pMenuPersistence;
 	QAction*			m_pMenuFlushDns;
 #ifdef _WIN32
 	QAction*			m_pMenuSecurityExplorer;
@@ -272,8 +307,6 @@ private:
 	QToolButton*		m_pHoldButton;
 	QActionGroup*		m_pHoldGroup;
 	QAction*			m_pHoldAction;
-
-	QToolButton*		m_pTreeButton;
 
 	QSystemTrayIcon*	m_pTrayIcon;
 	QMenu*				m_pTrayMenu;

@@ -140,6 +140,7 @@ CWindowsAPI::CWindowsAPI(QObject *parent) : CSystemAPI(parent)
 	m_pSymbolProvider = NULL;
 	m_pSidResolver = NULL;
 	m_pDnsResolver = NULL;
+	m_pSandboxieAPI = NULL;
 
 	m_bTestSigning = false;
 	m_uDriverStatus = 0;
@@ -254,6 +255,10 @@ bool CWindowsAPI::Init()
 	m_pDnsResolver = new CDnsResolver();
 	connect(m_pDnsResolver, SIGNAL(DnsCacheUpdated()), this, SIGNAL(DnsCacheUpdated()));
 	m_pDnsResolver->Init();
+
+	QString SbieDll = CSandboxieAPI::FindSbieDll();
+	if (!SbieDll.isEmpty())
+		m_pSandboxieAPI = new CSandboxieAPI(SbieDll);
 
 	return true;
 }
@@ -703,6 +708,9 @@ bool CWindowsAPI::UpdateSysStats()
 	m_pGpuMonitor->UpdateGpuStats();
 	m_pNetMonitor->UpdateNetStats();
 	m_pDiskMonitor->UpdateDiskStats();
+
+	//if (m_pSandboxieAPI)
+	//	m_pSandboxieAPI->UpdateSandboxes();
 
 	UpdatePerfStats();
 
@@ -1267,14 +1275,22 @@ CSocketPtr CWindowsAPI::FindSocket(quint64 ProcessId, quint32 ProtocolType,
 	return I.value();
 }
 
-void CWindowsAPI::AddNetworkIO(int Type, quint32 TransferSize)
+void CWindowsAPI::AddNetworkIO(int Type, quint32 TransferSize, bool bLAN)
 {
 	QWriteLocker Locker(&m_StatsMutex);
 
 	switch (Type)
 	{
-	case EtwNetworkReceiveType:	m_Stats.Net.AddReceive(TransferSize); break;
-	case EtwNetworkSendType:	m_Stats.Net.AddSend(TransferSize); break;
+	case EtwNetworkReceiveType:	
+		m_Stats.Net.AddReceive(TransferSize); 
+		if(bLAN) 
+			m_Stats.Lan.AddReceive(TransferSize); 
+		break;
+	case EtwNetworkSendType:	
+		m_Stats.Net.AddSend(TransferSize); 
+		if(bLAN) 
+			m_Stats.Lan.AddSend(TransferSize); 
+		break;
 	}
 }
 
@@ -1295,7 +1311,11 @@ void CWindowsAPI::OnNetworkEvent(int Type, quint64 ProcessId, quint64 ThreadId, 
     // Note: there is always the possibility of us receiving the event too early,
     // before the process item or network item is created. 
 
-	AddNetworkIO(Type, TransferSize);
+	bool bLAN = false;
+	if (theConf->GetBool("Options/ShowLanPlot", false))
+		bLAN = m_pNetMonitor->IsLanIP(RemoteAddress);
+
+	AddNetworkIO(Type, TransferSize, bLAN);
 
 	CSocketInfo::EMatchMode Mode = CSocketInfo::eFuzzy;
 
@@ -1439,15 +1459,13 @@ void CWindowsAPI::OnProcessEvent(int Type, quint32 ProcessId, QString CommandLin
 			if (!pProcess->IsHandleValid()) // check if we failed to pen the process (as it already terminated)
 			{
 				pProcess->SetName(FileName);
+				pProcess->SetCommandLineStr(CommandLine);
 				
 				QString FilePath = GetPathFromCmd(CommandLine, ProcessId, FileName, ParentId);
 				if (!FilePath.isEmpty())
 					pProcess->SetFileName(FilePath);
 			}
 		}
-
-		if(pProcess->GetCommandLineStr().isEmpty())
-			pProcess->SetCommandLineStr(CommandLine);
 	}
 }
 
@@ -1767,6 +1785,31 @@ bool CWindowsAPI::UpdateDriverList()
 	emit DriverListUpdated(Added, Changed, Removed);
 
 	return true; 
+}
+
+void CWindowsAPI::ClearPersistence()
+{
+	foreach(const CProcessPtr& pProcess, GetProcessList())
+		pProcess->ClearPersistence();
+
+	foreach(const CSocketPtr& pSocket, GetSocketList())
+		pSocket->ClearPersistence();
+
+	foreach(const CHandlePtr& pWinHandle, GetOpenFilesList())
+		pWinHandle->ClearPersistence();
+
+	foreach(const CServicePtr& pService, GetServiceList())
+		pService->ClearPersistence();
+
+	foreach(const CDriverPtr& pDriver, GetDriverList())
+		pDriver->ClearPersistence();
+
+	foreach(const CPoolEntryPtr& pPoolEntry, GetPoolTableList())
+		pPoolEntry->ClearPersistence();
+
+
+
+	m_pDnsResolver->ClearPersistence();
 }
 
 bool CWindowsAPI::UpdatePoolTable()

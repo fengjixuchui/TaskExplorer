@@ -5,7 +5,50 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 
 
-## [1.1.0] - 2020-23-01
+
+## [1.2.1] - 2020-04-27
+
+### Added
+- the TCP/IP traffic graph now show additional plots with LAN traffic based on ETW data
+- services can now be stoped from the process tree contect menu
+
+### Changed
+- statis column now sorts not alphabetically but by list color
+- reorganized the tool bar a bit and added a few shortcuts
+- switched back to the custom installer due to "compatybility" issues
+
+### Fixed
+- cpu affinity was not properly loaded from file
+- fixed more tray opening issues
+- fixed issue displaying .NET assembly informations
+- fixed issues with list coloring when not allcolors were enabled
+
+
+## [1.2.0] - 2020-04-20
+
+### Added
+- Option to configure process name display
+- Pressing the refresh toolbar button now also clears the persistence when in hold mode
+- Persistent Process Presets
+-- CPU, IO, Memory Priorities and CPU Affinity can be set persitence actoss process starts
+-- Processes are identifyed by path wildcard paths can be used
+-- The mechanism can also kill undesired processes swiftly
+- add pe file viewer
+- Sandboxie support, sandboxed prosesses are marked in yellow and the box thay belong to is provided in the tooltip
+
+### Changed
+- more options on main window close
+-- Exit confirmation dialog can now be disabled
+- by default symbols are not auto downloaded, upon selecting a thread the user will be prompted whether to download them of the internet
+- updated PHlib to version 3.0.3014
+- updated some default collors
+- switched to Inno Setup as instller
+
+### Fixed
+- fixed when opening from tray window sometimes being empty
+
+
+## [1.1.0] - 2020-01-23
 
 ### Added
 - added Dark Theme Support
@@ -24,7 +67,6 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - fixed bug where in the unifyed list view switching to tree view was not possible
 - fixed issue with some values not being initialized in CWinMainModule
 - fixed High DPI scaling issues
-
 
 
 ## [1.0.2] - 2019-12-24
@@ -84,6 +126,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added driver config window
 - added verbose error's dialog
 - added more status informations
+- ad empty ini file to zip release
 
 ### Changed
 - reduced cpu usage of models
