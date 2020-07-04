@@ -52,7 +52,7 @@ struct SWinToken
 CWinToken::CWinToken(QObject *parent)
 	:CAbstractInfo(parent)
 {
-	m_IsAppContainer = false;
+	m_IsAppContainer = 0;
 	m_SessionId = 0;
 	m_Elevated = false;
 	m_ElevationType = 0;
@@ -66,7 +66,7 @@ CWinToken::CWinToken(QObject *parent)
 
 CWinToken::~CWinToken()
 {
-	if (m->Type != eProcess)
+	if (m->Type != eProcess && m->Type != eOriginal)
 		NtClose(m->QueryHandle);
 	delete m;
 }
@@ -86,6 +86,13 @@ NTSTATUS NTAPI CWinToken__OpenProcessToken(_Out_ PHANDLE Handle, _In_ ACCESS_MAS
 	else if (m->Type == CWinToken::eThread)
 	{
 		status = NtOpenThreadToken(m->QueryHandle, DesiredAccess, TRUE, Handle);
+	}
+	else if (m->Type == CWinToken::eOriginal)
+	{
+		CSandboxieAPI* pSandboxieAPI = ((CWindowsAPI*)theAPI)->GetSandboxieAPI();
+		*Handle = pSandboxieAPI ? (HANDLE)pSandboxieAPI->OpenOriginalHandle((quint64)m->QueryHandle) : NULL;
+		if (Handle != NULL)
+			status = STATUS_SUCCESS;
 	}
 	else
 	{
@@ -111,7 +118,7 @@ void CWinToken::OnSidResolved(const QByteArray& SID, const QString& Name)
 {
 	QWriteLocker Locker(&m_Mutex);
 
-	if(SID == m_UserSid)
+	if(SID == m_UserSid || (m_IsAppContainer == 2 && SID == m_OwnerSid))
 		m_UserName = Name;
 
 	if(SID == m_OwnerSid)
@@ -167,6 +174,15 @@ CWinToken* CWinToken::TokenFromProcess(void* QueryHandle)
 	pToken->m->QueryHandle = QueryHandle;
 	pToken->InitStaticData();
 	return pToken;
+}
+
+CWinToken* CWinToken::OriginalToken(quint64 ProcessId)
+{
+	CWinToken* pOriginalToken = new CWinToken();
+	pOriginalToken->m->Type = eOriginal;
+	pOriginalToken->m->QueryHandle = (HANDLE)ProcessId;
+	pOriginalToken->InitStaticData();
+	return pOriginalToken;
 }
 
 bool CWinToken::InitStaticData()
@@ -279,7 +295,7 @@ bool CWinToken::UpdateDynamicData(bool MonitorChange, bool IsOrWasRunning)
 
 	BOOLEAN tokenIsAppContainer = FALSE;
     PhGetTokenIsAppContainer(tokenHandle, &tokenIsAppContainer);
-	m_IsAppContainer = tokenIsAppContainer != FALSE;
+	m_IsAppContainer = tokenIsAppContainer != FALSE ? 1 : 0;
 
 	PTOKEN_USER tokenUser;
     if (NT_SUCCESS(PhGetTokenUser(tokenHandle, &tokenUser)))
@@ -338,7 +354,11 @@ bool CWinToken::UpdateDynamicData(bool MonitorChange, bool IsOrWasRunning)
 
 				if (appContainerName)
 				{
-					m_UserName = CastPhString(appContainerName) + tr(" (APP_CONTAINER)");
+					m_ContainerName = CastPhString(appContainerName);
+
+					m_IsAppContainer = 2;
+
+					m_UserName = ((CWindowsAPI*)theAPI)->GetSidResolver()->GetSidFullName(m_OwnerSid, this, SLOT(OnSidResolved(const QByteArray&, const QString&)));
 				}
 
 				if (appContainerSid)

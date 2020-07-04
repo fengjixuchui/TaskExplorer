@@ -2,6 +2,43 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.2.8] - 2020-07-04
+
+### Added
+- "Original Token" button to inspect the original process token of sandboxed processes 
+-- SbieDrv driver 5.42 or higher required
+- added command line option to start multiple instances
+- added driver file obfuscation and driver installation dialog
+
+### Changed
+- reorganized settings pages
+- improved sandboxie support implementation
+
+### fixed
+- fixed excessive CPU usage in new process filter
+- fixed outdated data shown in token panel when no token could be obtained
+
+
+
+## [1.2.7] - 2020-06-13
+
+### Added
+- Custom run dialog with the ability to inject a DLL when starting  process
+- Added process filter to proces tree to improve usability
+
+### Changed
+- description in the process column now shows for svchost.exe instances a list of hosted services
+- esc key now clsoes the finder bar in lists
+- app id column now displays teh container id if its an app
+
+### Fixed
+- run dialogs now execute on return press
+- error with comctl32
+- user connect/login window now hides teh password
+- fixed pid in process info window
+- modern apps are now properly atributed to the their users
+
+
 
 ## [1.2.6] - 2020-06-02
 

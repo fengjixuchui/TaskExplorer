@@ -319,3 +319,38 @@ QAction* MakeAction(QActionGroup* pGroup, QMenu* pParent, const QString& Text, c
 	pParent->addAction(pAction);
 	return pAction;
 }
+
+QAction* MakeActionCheck(QMenu* pParent, const QString& Text, const QVariant& Data, bool bTriState)
+{
+	QCheckBox *checkBox = new QCheckBox(Text, pParent);
+	if(bTriState) checkBox->setTristate(true);
+	QWidgetAction *pAction = new QWidgetAction(pParent);
+	QObject::connect(checkBox, SIGNAL(stateChanged(int)), pAction, SLOT(trigger()));
+	pAction->setDefaultWidget(checkBox);
+	pAction->setData(Data);
+	pParent->addAction(pAction);
+	return pAction;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// 
+// 
+
+#ifdef WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+
+bool InitConsole(bool bCreateIfNeeded)
+{
+	if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE)
+	{
+		if (!bCreateIfNeeded)
+			return false;
+		AllocConsole();
+	}
+	freopen("CONOUT$", "w", stdout);
+	printf("\r\n");
+	return true;
+}
+#endif

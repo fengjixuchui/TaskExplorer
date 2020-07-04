@@ -20,6 +20,7 @@ public slots:
 
 protected:
 	void closeEvent(QCloseEvent *e);
+	bool event(QEvent* event);
 
 	quint64			m_PID;
 
